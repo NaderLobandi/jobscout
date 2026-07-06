@@ -133,9 +133,12 @@ def employment_type_allowed(job_type: str, allowed: list[str]) -> bool:
 def hitl_gate(package: dict) -> str:
     """Present one application package and HARD STOP for a human decision.
 
-    Returns 'approved' | 'rejected' | 'skipped'. 'approved' means the human
-    will apply manually via the job URL — JobScout itself has no code path
-    that submits an application anywhere.
+    Returns 'approved' | 'rejected' | 'skipped' | 'quit'. 'approved' means
+    the human will apply manually via the job URL — JobScout itself has no
+    code path that submits an application anywhere. 'quit' tells the
+    orchestrator to stop presenting further packages this run (each
+    remaining package is still an explicit human decision to stop
+    reviewing, not an automated bypass).
     """
     job = package["job"]
     console.print(Panel(
@@ -161,10 +164,12 @@ def hitl_gate(package: dict) -> str:
         "If you approve, apply manually at the URL above.[/yellow]"
     )
     decision = Prompt.ask(
-        "[bold]Approve this package?[/bold]",
-        choices=["approve", "reject", "skip"],
+        "[bold]Approve this package?[/bold] "
+        "(quit = stop reviewing remaining matches this run)",
+        choices=["approve", "reject", "skip", "quit"],
         default="skip",
     )
     audit("hitl_gate", {"job_id": job["id"], "title": job["title"],
                         "decision": decision}, actor="human")
-    return {"approve": "approved", "reject": "rejected"}.get(decision, "skipped")
+    return {"approve": "approved", "reject": "rejected",
+            "quit": "quit"}.get(decision, "skipped")

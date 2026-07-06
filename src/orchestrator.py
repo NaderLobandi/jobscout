@@ -182,6 +182,11 @@ async def run(max_score: int, dry_run: bool) -> None:
 
             # HARD STOP — the human decides; JobScout never submits.
             decision = hitl_gate(package)
+            if decision == "quit":
+                memory.mark_seen(job["id"], job["title"], "skipped")
+                console.print("[dim]Stopping review for this run — "
+                              "remaining matches will reappear next run.[/dim]")
+                break
         else:
             decision = "below_threshold"
             console.print(f"[dim]{package['score']:5.1f} (below {threshold}) "
