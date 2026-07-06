@@ -1,0 +1,26 @@
+{
+  "page": 1,
+  "page_count": 1,
+  "results": [
+    {
+      "name": "Senior Machine Learning Engineer",
+      "company": {"name": "Globex"},
+      "contents": "<p>Own our machine learning pipeline end to end.</p>",
+      "categories": [{"name": "Data and Analytics"}],
+      "levels": [{"name": "Senior Level"}],
+      "locations": [{"name": "Flexible / Remote"}],
+      "publication_date": "2026-07-01T12:00:00Z",
+      "refs": {"landing_page": "https://www.themuse.com/jobs/globex/senior-ml-engineer"}
+    },
+    {
+      "name": "Account Executive",
+      "company": {"name": "Initech"},
+      "contents": "<p>Sell software to enterprises.</p>",
+      "categories": [{"name": "Sales"}],
+      "levels": [{"name": "Mid Level"}],
+      "locations": [{"name": "Austin, TX"}],
+      "publication_date": "2026-07-01T12:00:00Z",
+      "refs": {"landing_page": "https://www.themuse.com/jobs/initech/account-executive"}
+    }
+  ]
+}

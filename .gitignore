@@ -1,0 +1,23 @@
+# Secrets — NEVER commit credentials (rubric requirement)
+.env
+
+# Real user data — profile.example.yaml is the committed template
+profile/profile.yaml
+profile/resume.pdf
+profile/*.pdf
+
+# Runtime artifacts
+logs/
+.jobscout_memory.json
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

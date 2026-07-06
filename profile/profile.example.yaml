@@ -1,0 +1,39 @@
+# JobScout profile — copy to profile.yaml and personalize (or run the
+# intake wizard: python -m src.intake). profile.yaml is gitignored; this
+# example ships with fake data only.
+
+candidate:
+  resume_path: ./profile/resume.pdf
+  summary: >
+    ML engineer with 3 years building production recommendation systems
+    in Python/PyTorch. Looking to move into applied LLM work.
+
+preferences:
+  employment_types: [full-time]          # internship, full-time, part-time, contract
+  target_roles:
+    - Machine Learning Engineer
+    - Research Engineer
+  seniority: [mid, senior]
+  industries: [AI/ML, healthcare, fintech]
+  locations: [Denver, Remote US]
+  remote_preference: remote_or_hybrid    # onsite, hybrid, remote_only, any
+  salary_floor_usd: 0                    # 0 = ignore salary
+  visa_sponsorship_required: false
+  must_haves: []
+  dealbreakers: []                       # e.g. ["on-call rotation"]
+
+# Scoring weights (must sum to 1.0). The weighted total is computed in
+# deterministic Python — the LLM only scores individual dimensions.
+weights:
+  skills_match: 0.4
+  role_title_match: 0.2
+  industry_match: 0.15
+  location_match: 0.15
+  seniority_match: 0.1
+
+# Jobs scoring >= this (0-100) get a drafted application package.
+draft_threshold: 70
+
+sources:
+  enabled: [remoteok, themuse, remotive, arbeitnow, greenhouse]
+  greenhouse_companies: [anthropic, stripe]

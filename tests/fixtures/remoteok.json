@@ -1,0 +1,25 @@
+[
+  {"legal": "API terms: link back to remoteok.com"},
+  {
+    "id": "100001",
+    "position": "Machine Learning Engineer",
+    "company": "Acme AI",
+    "tags": ["python", "pytorch", "machine learning"],
+    "description": "<p>Build and ship <b>ML models</b> for our recommendation platform.</p>",
+    "location": "Worldwide",
+    "salary_min": 120000,
+    "salary_max": 180000,
+    "url": "https://remoteok.com/remote-jobs/100001",
+    "epoch": 1751500000
+  },
+  {
+    "id": "100002",
+    "position": "Head Chef",
+    "company": "Remote Kitchen",
+    "tags": ["cooking"],
+    "description": "<p>Cook things remotely, somehow.</p>",
+    "location": "Worldwide",
+    "url": "https://remoteok.com/remote-jobs/100002",
+    "epoch": 1751500001
+  }
+]
