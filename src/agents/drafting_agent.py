@@ -16,7 +16,7 @@ import json
 
 from anthropic import Anthropic
 
-from . import MODEL, load_skill
+from . import MODEL, load_skill, thinking_kwargs
 from ..guardrails import audit
 
 DRAFT_SCHEMA = {
@@ -39,7 +39,6 @@ def draft_package(client: Anthropic, skills_profile: str, job: dict,
     response = client.messages.create(
         model=MODEL,
         max_tokens=2000,
-        thinking={"type": "adaptive"},
         system=load_skill("cover-letter-drafting"),
         output_config={"format": {"type": "json_schema", "schema": DRAFT_SCHEMA}},
         messages=[{
@@ -54,6 +53,7 @@ def draft_package(client: Anthropic, skills_profile: str, job: dict,
                 "</job_posting>"
             ),
         }],
+        **thinking_kwargs(),
     )
     text = next(b.text for b in response.content if b.type == "text")
     result = json.loads(text)

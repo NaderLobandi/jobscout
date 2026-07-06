@@ -19,7 +19,7 @@ import json
 
 from anthropic import Anthropic
 
-from . import MODEL, load_skill
+from . import MODEL, load_skill, thinking_kwargs
 from ..guardrails import audit
 
 DIMENSIONS = ("skills_match", "role_title_match", "industry_match",
@@ -59,7 +59,6 @@ def analyze_resume(client: Anthropic, masked_resume: str, summary: str) -> str:
     response = client.messages.create(
         model=MODEL,
         max_tokens=1500,
-        thinking={"type": "adaptive"},
         system=load_skill("resume-analysis"),
         messages=[{
             "role": "user",
@@ -68,6 +67,7 @@ def analyze_resume(client: Anthropic, masked_resume: str, summary: str) -> str:
                 f"Masked resume:\n{masked_resume or '(no resume provided)'}"
             ),
         }],
+        **thinking_kwargs(),
     )
     return next(b.text for b in response.content if b.type == "text")
 

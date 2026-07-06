@@ -70,6 +70,12 @@ cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env
 
 Optional: drop your resume at `profile/resume.pdf`.
 
+**Cost tip:** the agents default to `claude-opus-4-8`. For development, demo
+runs, and eval iterations, set `JOBSCOUT_MODEL=claude-haiku-4-5` in `.env` —
+a full run typically costs a few cents instead of tens of cents. Structured
+outputs work identically on Haiku; the code automatically skips the
+`thinking` param there since Haiku doesn't support extended thinking.
+
 ## Usage
 
 ```bash
