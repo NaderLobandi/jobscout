@@ -45,7 +45,9 @@ class RemotiveAdapter(JobSourceAdapter):
             title = item.get("title", "")
             company = item.get("company_name", "")
             description = strip_html(item.get("description", ""))
-            if not matches_keywords(f"{title} {item.get('category', '')} {description}",
+            # Relevance matching uses title + category only — free-text
+            # descriptions are prose, not a reliable relevance signal.
+            if not matches_keywords(f"{title} {item.get('category', '')}",
                                     query.keywords):
                 continue
             posted_at = None

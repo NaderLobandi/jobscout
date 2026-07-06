@@ -47,8 +47,9 @@ class TheMuseAdapter(JobSourceAdapter):
         company = (item.get("company") or {}).get("name", "")
         description = strip_html(item.get("contents", ""))
         categories = " ".join(c.get("name", "") for c in item.get("categories", []))
-        haystack = f"{title} {categories} {description}"
-        if not matches_keywords(haystack, query.keywords):
+        # Relevance matching uses title + categories only — free-text
+        # descriptions are prose, not a reliable relevance signal.
+        if not matches_keywords(f"{title} {categories}", query.keywords):
             return None
 
         locations = [l.get("name", "") for l in item.get("locations", [])]

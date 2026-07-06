@@ -36,8 +36,9 @@ class RemoteOKAdapter(JobSourceAdapter):
             company = item.get("company", "")
             description = strip_html(item.get("description", ""))
             tags = " ".join(item.get("tags") or [])
-            haystack = f"{title} {tags} {description}"
-            if not matches_keywords(haystack, query.keywords):
+            # Relevance matching uses title + tags only — free-text
+            # descriptions are prose, not a reliable relevance signal.
+            if not matches_keywords(f"{title} {tags}", query.keywords):
                 continue
 
             posted_at = None
@@ -53,7 +54,8 @@ class RemoteOKAdapter(JobSourceAdapter):
                     id=make_job_id(url, title, company),
                     title=title,
                     company=company,
-                    employment_type=guess_employment_type(haystack) or "unknown",
+                    employment_type=guess_employment_type(
+                        f"{title} {tags} {description}") or "unknown",
                     location=item.get("location") or "Remote",
                     remote="remote",  # RemoteOK is remote-only by definition
                     salary_min=item.get("salary_min") or None,

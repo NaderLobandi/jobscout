@@ -47,13 +47,17 @@ def http_client() -> httpx.AsyncClient:
 
 def matches_keywords(text: str, keywords: list[str]) -> bool:
     """Client-side keyword filter for boards without a search parameter.
-    Empty keyword list matches everything. Case-insensitive; a job matches
-    if ANY keyword's significant words all appear in the text."""
+    Empty keyword list matches everything. A job matches if ANY keyword
+    phrase appears verbatim (case-insensitive) in the text.
+
+    Deliberately a literal substring check, not bag-of-words: matching
+    each word of a multi-word phrase independently ANYWHERE in a long job
+    description produces false positives (e.g. a Marketing role whose
+    boilerplate separately mentions "research" and "engineering" would
+    satisfy a "Research Engineer" keyword under bag-of-words matching even
+    though the actual role is unrelated). Same discipline as
+    violates_dealbreakers() in guardrails.py."""
     if not keywords:
         return True
     t = text.lower()
-    for kw in keywords:
-        words = [w for w in kw.lower().split() if len(w) > 2]
-        if words and all(w in t for w in words):
-            return True
-    return False
+    return any(kw.strip().lower() in t for kw in keywords if kw.strip())

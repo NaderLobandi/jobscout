@@ -39,6 +39,25 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 console = Console()
 
 
+def _relevance_rank(job: dict, target_roles: list[str]) -> int:
+    """Cheap deterministic tie-breaker so the (budget-capped) LLM scoring
+    calls go to the most obviously relevant jobs first, rather than
+    whatever order dedupe/fan-out happened to produce. A full target-role
+    phrase in the title scores highest; partial word overlap scores lower;
+    no overlap sorts last."""
+    title = job["title"].lower()
+    best = 0
+    for role in target_roles:
+        role_l = role.lower().strip()
+        if role_l and role_l in title:
+            best = max(best, 2)
+            continue
+        words = [w for w in role_l.split() if len(w) > 2]
+        if words and any(w in title for w in words):
+            best = max(best, 1)
+    return best
+
+
 def deterministic_filter(jobs: list[dict], profile: dict, memory: Memory) -> list[dict]:
     """SECURITY (deterministic guardrail): hard filters run BEFORE any LLM
     call — cheaper, and immune to prompt injection from job-posting text.
@@ -125,6 +144,10 @@ async def run(max_score: int, dry_run: bool) -> None:
 
     prefs = profile.get("preferences", {})
     weights = profile.get("weights", {})
+    # Rank by title relevance before capping — the scoring budget should go
+    # to the jobs most likely to matter, not whatever order dedupe produced.
+    jobs.sort(key=lambda j: _relevance_rank(j, prefs.get("target_roles", [])),
+             reverse=True)
     to_score = jobs[:max_score]
     console.print(f"[bold cyan]⚖️  Scoring {len(to_score)} jobs…[/bold cyan]")
     scored: list[dict] = []

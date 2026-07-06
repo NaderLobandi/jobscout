@@ -9,12 +9,18 @@ Everything that later goes to the LLM passes through guardrails.mask_pii().
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import yaml
 from pypdf import PdfReader
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
+
+# pypdf logs benign "Ignoring wrong pointing object" warnings for PDFs with
+# non-standard xref tables (common from Word/Docs exporters); it still
+# extracts text fine. Silenced so demo/CLI output stays clean.
+logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROFILE_PATH = REPO_ROOT / "profile" / "profile.yaml"

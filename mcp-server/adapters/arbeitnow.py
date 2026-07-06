@@ -34,8 +34,9 @@ class ArbeitnowAdapter(JobSourceAdapter):
             description = strip_html(item.get("description", ""))
             tags = " ".join(item.get("tags") or [])
             types = " ".join(item.get("job_types") or [])
-            if not matches_keywords(f"{title} {tags} {types} {description}",
-                                    query.keywords):
+            # Relevance matching uses title + tags/types only — free-text
+            # descriptions are prose, not a reliable relevance signal.
+            if not matches_keywords(f"{title} {tags} {types}", query.keywords):
                 continue
             is_remote = bool(item.get("remote"))
             if query.remote_only and not is_remote:
