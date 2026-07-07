@@ -48,13 +48,18 @@ class PIIMasker:
 
     def __init__(self, name: str = "", email: str = "", phone: str = "",
                  address: str = ""):
-        self.mapping: dict[str, str] = {}  # placeholder -> real value
         self._declared = [
             ("{{CANDIDATE_NAME}}", name),
             ("{{CANDIDATE_EMAIL}}", email),
             ("{{CANDIDATE_PHONE}}", phone),
             ("{{CANDIDATE_ADDRESS}}", address),
         ]
+        # placeholder -> real value. Prepopulated from declared values so
+        # unmask() works even in flows (e.g. the Streamlit UI) where this
+        # instance renders a draft without having masked text first.
+        self.mapping: dict[str, str] = {
+            ph: val for ph, val in self._declared if val
+        }
 
     def mask(self, text: str) -> str:
         if not text:

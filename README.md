@@ -78,6 +78,29 @@ outputs work identically on Haiku; the code automatically skips the
 
 ## Usage
 
+### Web UI (recommended)
+
+```bash
+streamlit run app.py
+```
+
+Three pages, same pipeline as the CLI underneath (identical MCP server,
+guardrails, and agents):
+
+- **👤 Profile** — full intake form: contact info, resume PDF upload,
+  target roles, preferences, dealbreakers, per-dimension scoring weights,
+  draft threshold, and job sources. Saves to `profile/profile.yaml`
+  (gitignored).
+- **🚀 Run JobScout** — one click runs search → deterministic filter →
+  resume analysis → per-job scoring with live progress. Each match expands
+  into a score-dimension breakdown, drafted cover letter + resume tweaks,
+  and **Approve / Reject / Skip** buttons — the HITL gate as a UI.
+- **📚 History** — every job ever scored, with scores, decisions, links,
+  and saved cover letters (`.jobscout_records.json`, gitignored), plus a
+  JSON export.
+
+### CLI
+
 ```bash
 # First run interviews you and writes profile/profile.yaml (gitignored):
 python -m src.orchestrator
@@ -188,7 +211,9 @@ CLAUDE.md                    agent operating rules (spec-first, security)
 specs/                       source of truth: design + BDD scenarios
 skills/                      3 Agent Skills (progressive disclosure)
 mcp-server/                  MCP server + normalized schema + 7 adapters
-src/                         orchestrator, sub-agents, guardrails, memory, intake
+src/                         orchestrator, sub-agents, guardrails, memory,
+                             intake, pipeline (UI helpers), records (history)
+app.py                       Streamlit UI (profile / run / history)
 profile/profile.example.yaml committed template (real profile is gitignored)
 evals/                       golden set + LLM-as-judge harness
 tests/                       pytest for the deterministic parts

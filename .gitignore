@@ -9,6 +9,7 @@ profile/*.pdf
 # Runtime artifacts
 logs/
 .jobscout_memory.json
+.jobscout_records.json
 
 # Python
 __pycache__/
