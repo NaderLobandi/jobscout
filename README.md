@@ -106,25 +106,35 @@ streamlit run app.py
 Three pages, same pipeline as the CLI underneath (identical MCP server,
 guardrails, and agents):
 
-- **👤 Profile** — full intake form: contact info, resume PDF upload,
-  target roles, preferences, dealbreakers, per-dimension scoring weights,
-  draft threshold, and job sources. Saves to `profile/profile.yaml`
-  (gitignored).
+- **👤 Profile** — full intake form: contact info, resume PDF upload +
+  supplementary documents, a "🔍 Preview PDF text extraction" panel to
+  verify what actually got pulled out of a PDF before it reaches an LLM,
+  cover-letter tone (`communication_style`: direct / collaborative /
+  enthusiastic), target roles, preferences, dealbreakers, an
+  **only-show-postings-from-the-last-N-days** filter, per-dimension
+  scoring weights, draft threshold, and job sources (including Lever/Ashby
+  company tokens and the LinkedIn ToS acknowledgment). Saves to
+  `profile/profile.yaml` (gitignored).
 - **🚀 Run JobScout** — one click runs search → deterministic filter →
-  resume analysis → per-job scoring with live progress. Each match expands
-  into a score-dimension breakdown, a drafted cover letter that's already
-  been through a second-pass reviewer critique + resume tweaks, a
-  deterministic **keyword-coverage check** against the posting (no LLM
-  call — which of the posting's own key terms actually made it into the
-  letter), and **Approve / Reject / Skip** buttons — the HITL gate as a UI.
+  resume analysis → per-job scoring with live progress, with an optional
+  **"stop early once N found"** goal so it keeps scoring more jobs (up to
+  your cost cap) instead of a fixed batch. Each match expands into a
+  score-dimension breakdown, a drafted cover letter that's already been
+  through a second-pass reviewer critique + resume tweaks, a deterministic
+  **keyword-coverage check** against the posting (no LLM call — which of
+  the posting's own key terms actually made it into the letter), and
+  **Approve / Reject / Skip** buttons — the HITL gate as a UI.
 - **📚 History** — every job ever scored, with scores, decisions, the date
-  you decided, and saved cover letters (`.jobscout_records.json`,
+  you decided, the origin **publisher** for aggregator sources (e.g.
+  `jsearch (Glassdoor)`), and saved cover letters (`.jobscout_records.json`,
   gitignored), plus a JSON export. Each entry expands into its full
   per-dimension score breakdown and draft, so the summary table's score
-  always has somewhere to drill into. Opens with a **recurring-gaps**
-  view: which scoring dimension consistently drags you down across your
-  whole history (pure aggregation, free, no LLM call), with an on-demand
-  button to get a short, evidence-grounded suggestion for the weakest one.
+  always has somewhere to drill into — filter by decision (including
+  `undecided`) to see exactly what an unattended `--auto` run left for you
+  to review. Opens with a **recurring-gaps** view: which scoring dimension
+  consistently drags you down across your whole history (pure
+  aggregation, free, no LLM call), with an on-demand button to get a
+  short, evidence-grounded suggestion for the weakest one.
 
 ### CLI
 
@@ -170,17 +180,115 @@ reliable "recent enough."
 
 **Running it daily.** JobScout has no built-in scheduler — `--auto` makes
 a run safe to schedule, but starting the schedule itself is a decision
-about your machine, not the repo, so it's opt-in via your OS's own tools,
-e.g. cron:
+about your machine, not the repo, so it's opt-in via your OS's own tools.
+Either way, open the Streamlit **History** page whenever you like to
+review what it found (filter by `undecided`) — the run itself never
+approves or submits anything.
+
+#### macOS: `launchd` (recommended over cron on Mac — see note below)
+
+Create `~/Library/LaunchAgents/com.jobscout.dailyrun.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jobscout.dailyrun</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/path/to/jobscout/.venv/bin/python</string>
+        <string>-m</string>
+        <string>src.orchestrator</string>
+        <string>--auto</string>
+        <string>--min-matches</string>
+        <string>5</string>
+        <string>--max-score</string>
+        <string>40</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/path/to/jobscout</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/path/to/jobscout/logs/launchd_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/path/to/jobscout/logs/launchd_stderr.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
+```
+
+Replace every `/path/to/jobscout` with your repo's absolute path (must
+match exactly — launchd does not expand `~` or relative paths). What to
+edit for common changes:
+
+| Want to... | Edit |
+|---|---|
+| Run at a different time | `StartCalendarInterval` → `Hour` (0–23) / `Minute` |
+| Run more than once a day | Change `StartCalendarInterval` to an **array** of `{Hour, Minute}` dicts |
+| Find more/fewer matches before stopping | `--min-matches` value in `ProgramArguments` |
+| Raise the cost ceiling if the goal is rarely met | `--max-score` value in `ProgramArguments` |
+| Go back to a fixed batch instead of goal-seeking | Delete the `--min-matches`/`5` pair entirely |
+
+Then load it (do this once, and again after every edit):
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.jobscout.dailyrun.plist 2>/dev/null  # ok if this errors the first time
+launchctl load ~/Library/LaunchAgents/com.jobscout.dailyrun.plist
+```
+
+Other commands worth knowing:
+
+```bash
+# Pause it (stays installed, just won't fire):
+launchctl unload ~/Library/LaunchAgents/com.jobscout.dailyrun.plist
+
+# Resume it:
+launchctl load ~/Library/LaunchAgents/com.jobscout.dailyrun.plist
+
+# Check it's registered (a bare "-" in the PID column = loaded, not currently running):
+launchctl list | grep jobscout
+
+# Trigger it right now, without waiting for the scheduled time —
+# the real way to test a change, since it exercises the actual plist:
+launchctl start com.jobscout.dailyrun
+
+# Remove it entirely:
+launchctl unload ~/Library/LaunchAgents/com.jobscout.dailyrun.plist
+rm ~/Library/LaunchAgents/com.jobscout.dailyrun.plist
+
+# Watch what it's doing:
+tail -f /path/to/jobscout/logs/launchd_stdout.log
+```
+
+**Sleep/wake:** modern macOS will generally run a missed `launchd` job
+shortly after the Mac wakes up if it was asleep at the scheduled time —
+but a fully powered-off Mac just skips that day; nothing catches up
+retroactively.
+
+#### Linux / anywhere else: cron
 
 ```cron
-# ~/.crontab — daily at 8am, from the repo root
+# crontab -e — daily at 8am, from the repo root
 0 8 * * * cd /path/to/jobscout && .venv/bin/python -m src.orchestrator --auto --min-matches 5 --max-score 40 >> logs/cron.log 2>&1
 ```
 
-or a macOS `launchd` plist calling the same command. Either way, open the
-Streamlit **History** page whenever you like to review what it found —
-the run itself never approves or submits anything.
+Same flags, same behavior — cron just doesn't attempt to catch up a
+missed run the way `launchd` does.
 
 ### Testing & evals
 
@@ -316,6 +424,20 @@ Path to production:
 - Scoring costs tokens: default caps at 6 jobs/run (`--max-score` to change).
 - Salary data is sparse on most boards; the salary-floor filter only fires
   when a posting states a max salary below your floor.
+- **Employment-type detection is inference, not verification.** Lever and
+  Ashby expose a genuine structured field, so those are exact. Everywhere
+  else — including LinkedIn, where the `f_JT` search filter is *not*
+  strictly enforced by LinkedIn itself — JobScout infers from the title
+  and description text. This is reliable for internships specifically
+  (real internships are almost always self-labeled), which is why an
+  unlabeled ("unknown") posting is excluded outright when internship is
+  your only selected type — but it's still text inference, not ground
+  truth from the source.
+- **A failed draft in `--auto` mode has no retry path yet.** If the
+  drafting call errors (an occasional structured-output hiccup), the job
+  is still marked "seen" — it won't resurface in a future search, and
+  History has no "draft now" button for a score-only entry. Rare, but if
+  you hit it, you'd need to draft that one manually another way.
 
 ## Repo map
 
