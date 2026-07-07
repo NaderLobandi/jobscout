@@ -63,7 +63,7 @@ no matter how many boards exist behind it (the NxM integration problem).
 | **Multi-agent system** | Orchestrator + search/scoring/drafting sub-agents (`src/agents/`) |
 | **Custom MCP server** | `mcp-server/job_search_server.py`, stdio transport, official Python SDK |
 | **Security features** | HITL gate, PII masking, audit log, least privilege, deterministic filters, prompt-injection defense (`src/guardrails.py`) |
-| **Agent Skills** | Three SKILL.md skills with progressive disclosure (`skills/`) |
+| **Agent Skills** | Four SKILL.md skills with progressive disclosure (`skills/`) |
 | **Memory** | Cross-session seen/approved tracking (`src/memory.py`) |
 | **Evals + tests** | pytest for deterministic parts, LLM-as-judge for the scoring agent (`tests/`, `evals/`) |
 | **Deployability** | `Dockerfile` + path to production below |
@@ -105,8 +105,9 @@ guardrails, and agents):
   (gitignored).
 - **🚀 Run JobScout** — one click runs search → deterministic filter →
   resume analysis → per-job scoring with live progress. Each match expands
-  into a score-dimension breakdown, drafted cover letter + resume tweaks,
-  and **Approve / Reject / Skip** buttons — the HITL gate as a UI.
+  into a score-dimension breakdown, a drafted cover letter that's already
+  been through a second-pass reviewer critique + resume tweaks, and
+  **Approve / Reject / Skip** buttons — the HITL gate as a UI.
 - **📚 History** — every job ever scored, with scores, decisions, links,
   and saved cover letters (`.jobscout_records.json`, gitignored), plus a
   JSON export.
@@ -128,8 +129,11 @@ A full run: searches all enabled boards concurrently via MCP → drops
 already-seen jobs, wrong employment types, dealbreakers, and salary-floor
 misses **in code, before any LLM call** → analyzes your masked resume once →
 scores each job per dimension with rationale → drafts a cover letter +
-resume tweaks for jobs above your threshold → presents each package at the
-approval gate. You review, then apply yourself at the job URL.
+resume tweaks for jobs above your threshold → a second, fresh-context
+reviewer agent critiques the draft (unsupported claims, missed keywords,
+generic phrasing, tone) and returns a revised letter → presents each
+package, including the reviewer's notes, at the approval gate. You
+review, then apply yourself at the job URL.
 
 ### Testing & evals
 
@@ -221,7 +225,7 @@ Path to production:
 ```
 CLAUDE.md                    agent operating rules (spec-first, security)
 specs/                       source of truth: design + BDD scenarios
-skills/                      3 Agent Skills (progressive disclosure)
+skills/                      4 Agent Skills (progressive disclosure)
 mcp-server/                  MCP server + normalized schema + 7 adapters
 src/                         orchestrator, sub-agents, guardrails, memory,
                              intake, pipeline (UI helpers), records (history)

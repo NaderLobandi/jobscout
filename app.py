@@ -213,12 +213,17 @@ def page_profile() -> None:
 
 def _draft_for(package: dict, masker: PIIMasker, skills_profile: str) -> None:
     job = package["job"]
+    client = st.session_state["client"]
     with st.spinner(f"Drafting application package for {job['title']}…"):
-        drafts = drafting_agent.draft_package(
-            st.session_state["client"], skills_profile, job, package)
+        drafts = drafting_agent.draft_package(client, skills_profile, job, package)
+    with st.spinner("Second pass: reviewing the draft for a fresh critique…"):
+        review = drafting_agent.review_draft(
+            client, skills_profile, job, drafts["cover_letter"])
         # SECURITY: unmask ONLY here — final local render for human eyes;
         # the unmasked text never goes back through the model.
-        drafts["cover_letter"] = masker.unmask(drafts["cover_letter"])
+        drafts["cover_letter"] = masker.unmask(review["revised_cover_letter"])
+        drafts["review_notes"] = review["revision_summary"]
+        drafts["review_issues"] = review["issues_found"]
     records.upsert(job, drafts=drafts)
     st.rerun()
 
@@ -265,6 +270,12 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
                          key=f"letter_{job['id']}")
             st.markdown("**📄 Suggested resume tweaks**")
             st.markdown(record.get("resume_tweaks", ""))
+            if record.get("review_notes"):
+                with st.expander("🔍 Reviewer notes (second-pass critique)"):
+                    st.caption(record["review_notes"])
+                    for issue in record.get("review_issues") or []:
+                        st.markdown(f"- **{issue['category'].replace('_', ' ')}** "
+                                    f"— {issue['detail']}")
         else:
             hint = ("" if package["score"] >= threshold else
                     " (below your draft threshold — drafting is optional)")
@@ -437,6 +448,9 @@ def page_history() -> None:
                 if e.get("resume_tweaks"):
                     st.markdown("**Resume tweaks**")
                     st.markdown(e["resume_tweaks"])
+                if e.get("review_notes"):
+                    st.markdown("**🔍 Reviewer notes**")
+                    st.caption(e["review_notes"])
 
     st.download_button(
         "⬇️ Export all records (JSON)",

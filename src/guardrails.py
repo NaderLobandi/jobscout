@@ -163,6 +163,13 @@ def hitl_gate(package: dict) -> str:
     if package.get("resume_tweaks"):
         console.print(Panel(package["resume_tweaks"],
                             title="📄 Suggested resume tweaks", border_style="blue"))
+    if package.get("review_notes"):
+        issues = "\n".join(
+            f"  • {i['category'].replace('_', ' ')}: {i['detail']}"
+            for i in package.get("review_issues", []))
+        body = package["review_notes"] + (f"\n\n{issues}" if issues else "")
+        console.print(Panel(body, title="🔍 Reviewer notes (second-pass critique)",
+                            border_style="magenta"))
 
     console.print(
         "[yellow]JobScout never submits applications. "

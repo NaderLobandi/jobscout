@@ -46,7 +46,12 @@ Five components per the course framework: **model** (Claude API),
 4. Score: Scoring Agent per job (masked resume + prefs) → weighted score,
    per-dimension breakdown, rationale (structured output, JSON schema)
 5. Draft: for jobs ≥ threshold → Drafting Agent → cover letter + resume tweaks
-6. HITL gate: present package, hard stop, user applies manually
+5b. Review: a second, fresh-context call (Drafting Agent's `review_draft`)
+   critiques the masked cover letter for unsupported claims, missed
+   keywords, generic phrasing, and tone mismatch, and returns a revised
+   letter + a one-sentence summary. Runs on masked text, before unmask.
+6. HITL gate: present package (including reviewer notes), hard stop, user
+   applies manually
 7. Memory: record seen/approved job IDs; reruns skip duplicates
 
 ## 3. Data contracts

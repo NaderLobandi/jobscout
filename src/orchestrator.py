@@ -173,10 +173,14 @@ async def run(max_score: int, dry_run: bool) -> None:
             try:
                 drafts = drafting_agent.draft_package(client, skills_profile,
                                                       job, package)
+                review = drafting_agent.review_draft(
+                    client, skills_profile, job, drafts["cover_letter"])
                 # SECURITY: unmask ONLY here — final local render for human
                 # eyes; the unmasked text never goes back through the model.
-                package["cover_letter"] = masker.unmask(drafts["cover_letter"])
+                package["cover_letter"] = masker.unmask(review["revised_cover_letter"])
                 package["resume_tweaks"] = drafts["resume_tweaks"]
+                package["review_notes"] = review["revision_summary"]
+                package["review_issues"] = review["issues_found"]
             except Exception as exc:
                 console.print(f"[red]drafting failed: {exc}[/red]")
 
