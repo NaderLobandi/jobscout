@@ -56,6 +56,13 @@ Five components per the course framework: **model** (Claude API),
 6. HITL gate: present package (including reviewer notes), hard stop, user
    applies manually
 7. Memory: record seen/approved job IDs; reruns skip duplicates
+8. Insights (on demand, UI History page only): `src/insights.py` computes
+   average score per dimension across every Records entry ever scored —
+   plain aggregation, no LLM call — surfacing which dimension recurringly
+   drags the overall score down and how often it was the single weakest
+   link per job. Insights Agent's `suggest_focus` turns the aggregate for
+   the worst dimension into a short, evidence-grounded suggestion —
+   spends a token only when the user explicitly asks for it.
 
 ## 3. Data contracts
 

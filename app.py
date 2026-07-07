@@ -19,8 +19,9 @@ import streamlit as st
 import yaml
 from dotenv import load_dotenv
 
-from src.agents import MODEL, drafting_agent, scoring_agent
+from src.agents import MODEL, drafting_agent, insights_agent, scoring_agent
 from src.guardrails import PIIMasker
+from src.insights import aggregate_dimension_gaps
 from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, extract_profile_text,
                         list_profile_documents, load_profile)
 from src.memory import Memory
@@ -431,12 +432,44 @@ def page_run() -> None:
 # Page 3 — History
 # ---------------------------------------------------------------------------
 
+def render_skill_gaps(entries: list[dict]) -> None:
+    """Recurring dimension gaps across every job ever scored — pure
+    aggregation, no LLM call, always available for free. The narrative
+    suggestion below it is a separate, explicit, on-demand LLM call."""
+    gaps = aggregate_dimension_gaps(entries)
+    if not gaps:
+        return
+    st.subheader("📈 Recurring gaps")
+    st.caption("Where your scores consistently land, across every job "
+              "JobScout has ever scored for you.")
+    for row in gaps:
+        clamped = max(0, min(int(row["avg_score"]), 100))
+        st.progress(clamped / 100,
+                   text=f"**{row['dimension'].replace('_', ' ')} — "
+                        f"{row['avg_score']}/100 avg**  ·  scored on "
+                        f"{row['count']} jobs  ·  weakest link in "
+                        f"{row['weakest_count']} of them")
+
+    worst = gaps[0]
+    if st.button(f"🎯 Get suggestions for {worst['dimension'].replace('_', ' ')}",
+                key="suggest_focus"):
+        if "client" not in st.session_state:
+            from anthropic import Anthropic
+            st.session_state["client"] = Anthropic()
+        with st.spinner("Thinking about what would actually move this number…"):
+            suggestion = insights_agent.suggest_focus(st.session_state["client"], worst)
+        st.info(suggestion)
+
+
 def page_history() -> None:
     st.header("📚 History")
     entries = records.all()
     if not entries:
         st.info("No records yet — run JobScout first.")
         return
+
+    render_skill_gaps(entries)
+    st.divider()
 
     decisions = ["all"] + sorted(
         {e.get("decision", "undecided") or "undecided" for e in entries})

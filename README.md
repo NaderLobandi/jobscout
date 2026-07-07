@@ -60,10 +60,10 @@ no matter how many boards exist behind it (the NxM integration problem).
 
 | Concept | Where |
 |---|---|
-| **Multi-agent system** | Orchestrator + search/scoring/drafting sub-agents (`src/agents/`) |
+| **Multi-agent system** | Orchestrator + search/scoring/drafting/review/insights sub-agents (`src/agents/`) |
 | **Custom MCP server** | `mcp-server/job_search_server.py`, stdio transport, official Python SDK |
 | **Security features** | HITL gate, PII masking, audit log, least privilege, deterministic filters, prompt-injection defense (`src/guardrails.py`) |
-| **Agent Skills** | Four SKILL.md skills with progressive disclosure (`skills/`) |
+| **Agent Skills** | Five SKILL.md skills with progressive disclosure (`skills/`) |
 | **Memory** | Cross-session seen/approved tracking (`src/memory.py`) |
 | **Evals + tests** | pytest for deterministic parts, LLM-as-judge for the scoring agent (`tests/`, `evals/`) |
 | **Deployability** | `Dockerfile` + path to production below |
@@ -113,7 +113,10 @@ guardrails, and agents):
   **Approve / Reject / Skip** buttons — the HITL gate as a UI.
 - **📚 History** — every job ever scored, with scores, decisions, links,
   and saved cover letters (`.jobscout_records.json`, gitignored), plus a
-  JSON export.
+  JSON export. Opens with a **recurring-gaps** view: which scoring
+  dimension consistently drags you down across your whole history (pure
+  aggregation, free, no LLM call), with an on-demand button to get a
+  short, evidence-grounded suggestion for the weakest one.
 
 ### CLI
 
@@ -228,7 +231,7 @@ Path to production:
 ```
 CLAUDE.md                    agent operating rules (spec-first, security)
 specs/                       source of truth: design + BDD scenarios
-skills/                      4 Agent Skills (progressive disclosure)
+skills/                      5 Agent Skills (progressive disclosure)
 mcp-server/                  MCP server + normalized schema + 7 adapters
 src/                         orchestrator, sub-agents, guardrails, memory,
                              intake, pipeline (UI helpers), records (history)
