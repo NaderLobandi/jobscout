@@ -218,19 +218,32 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
                 package["review_notes"] = review["revision_summary"]
                 package["review_issues"] = review["issues_found"]
                 package["keyword_coverage"] = keyword_coverage(job, package["cover_letter"])
+                draft_ok = True
             except Exception as exc:
                 console.print(f"[red]drafting failed: {exc}[/red]")
+                draft_ok = False
 
             if auto:
                 # No interactive prompt in an unattended run — HITL still
-                # applies, it's just deferred: save the drafted package
-                # with NO decision, exactly like the Streamlit UI would
-                # before you click Approve/Reject/Skip. JobScout still has
-                # no code path that submits anything.
+                # applies, it's just deferred: save the scored/drafted
+                # package with NO decision, exactly like the Streamlit UI
+                # would before you click Approve/Reject/Skip. JobScout
+                # still has no code path that submits anything.
                 records.upsert(job, drafts=package)
-                console.print(f"[green]✓ saved for review: {job['title']} "
-                              f"@ {job['company']} ({package['score']:.0f}) "
-                              f"— {job['url']}[/green]")
+                if draft_ok:
+                    console.print(
+                        f"[green]✓ saved for review: {job['title']} "
+                        f"@ {job['company']} ({package['score']:.0f}) "
+                        f"— {job['url']}[/green]")
+                else:
+                    console.print(
+                        f"[yellow]⚠ score saved, but drafting failed for "
+                        f"{job['title']} @ {job['company']} "
+                        f"({package['score']:.0f}) — {job['url']} — it'll "
+                        f"show in History with a score but no cover letter "
+                        f"(History has no redraft button yet; a fresh "
+                        f"interactive search won't retry it either, since "
+                        f"it's already marked seen).[/yellow]")
                 continue
             # HARD STOP — the human decides; JobScout never submits.
             decision = hitl_gate(package)

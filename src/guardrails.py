@@ -124,10 +124,19 @@ def violates_dealbreakers(job_text: str, dealbreakers: list[str]) -> str | None:
 
 
 def employment_type_allowed(job_type: str, allowed: list[str]) -> bool:
-    """'unknown' passes (we'd rather score it than silently drop it);
-    a known type must be in the allowed list."""
-    if not allowed or job_type == "unknown":
+    """'unknown' passes for most selections (we'd rather score an
+    ambiguous posting than silently drop a real match that just didn't
+    say "full-time" explicitly — most full-time postings don't).
+
+    EXCEPTION: when internship is the ONLY selected type, 'unknown' does
+    NOT pass. The asymmetry is real, not arbitrary: genuine internships
+    are reliably self-labeled ("Intern"/"Internship" in the title is a
+    near-universal norm), so a posting with no stated type is strong
+    evidence it's NOT an internship, not a coin flip worth scoring."""
+    if not allowed:
         return True
+    if job_type == "unknown":
+        return set(allowed) != {"internship"}
     return job_type in allowed
 
 

@@ -16,8 +16,10 @@ first. Every mitigation below is deliberate; do not weaken them:
   plus at most MAX_DETAIL_FETCHES description fetches, ≥1s apart.
 - Any 429/999 (LinkedIn's rate-limit codes) aborts every remaining
   LinkedIn request for this run.
-- Server-side f_JT/f_WT filters narrow at the source so no request is
-  spent on jobs the deterministic filter would drop anyway.
+- Server-side f_JT/f_WT filters narrow the search, but are NOT trusted as
+  ground truth — LinkedIn's guest search does not strictly enforce them,
+  so every result's employment_type is still inferred from its own title
+  (and description, once fetched), never assumed from the request filter.
 """
 
 from __future__ import annotations
@@ -117,12 +119,14 @@ class LinkedInAdapter(JobSourceAdapter):
                     posted_at = datetime.fromisoformat(date_m.group(1))
                 except ValueError:
                     pass
-            # If the search was server-filtered to exactly one type, every
-            # result IS that type; otherwise fall back to title inference.
-            if len(self.employment_types) == 1 and self.employment_types[0] in _F_JT:
-                employment_type = self.employment_types[0]
-            else:
-                employment_type = guess_employment_type(title)
+            # NEVER trust f_JT as ground truth: LinkedIn's guest/public
+            # search does not strictly enforce it — a full-time posting
+            # like "Machine Learning Engineer" can and does come back even
+            # under f_JT=I (internship-only). Treating the request filter
+            # as proof of the result's type mass-mislabels real full-time
+            # roles as internships. Always infer per-item from the actual
+            # title text instead.
+            employment_type = guess_employment_type(title)
             jobs.append(
                 Job(
                     id=make_job_id(url, title, company),
@@ -158,3 +162,7 @@ class LinkedInAdapter(JobSourceAdapter):
             desc_m = _DESCRIPTION_RE.search(resp.text)
             if desc_m:
                 job.description = strip_html(desc_m.group(1))[:4000]
+                # Re-infer with the full body in hand — a title alone can
+                # miss an internship the posting states explicitly inside.
+                job.employment_type = guess_employment_type(
+                    f"{job.title} {job.description}")

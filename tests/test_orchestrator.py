@@ -46,3 +46,23 @@ def test_max_posting_age_unset_keeps_everything(tmp_path):
     kept = deterministic_filter(jobs, profile, memory)
 
     assert {j["id"] for j in kept} == {"undated", "old"}
+
+
+def test_internship_only_drops_unlabeled_fulltime_jobs(tmp_path):
+    # Regression for the real "Machine Learning Engineer @ Intel" case:
+    # a full-time posting an upstream adapter couldn't positively label
+    # (employment_type="unknown") must be dropped when internship is the
+    # ONLY selected type — it must not fall through to the LLM scorer,
+    # which has no way to override a wrong-but-plausible-looking match.
+    memory = Memory(tmp_path / "mem.json")
+    profile = {"preferences": {"employment_types": ["internship"]}}
+    jobs = [
+        _job("real_intern", posted_days_ago=1, title="ML Engineer Intern",
+             employment_type="internship"),
+        _job("unlabeled_fulltime", posted_days_ago=1,
+             title="Machine Learning Engineer", employment_type="unknown"),
+    ]
+
+    kept = deterministic_filter(jobs, profile, memory)
+
+    assert [j["id"] for j in kept] == ["real_intern"]

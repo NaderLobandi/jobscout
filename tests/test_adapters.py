@@ -142,12 +142,13 @@ def test_linkedin_parsing(monkeypatch):
                                        tos_acknowledged=True)
     jobs = asyncio.run(adapter.search(SearchQuery(keywords=["ml intern"])))
 
-    assert len(jobs) == 2
+    assert len(jobs) == 3
     by_title = {j.title: j for j in jobs}
     intern = by_title["ML Engineering Intern"]
     assert intern.company == "Acme AI"
     assert intern.location == "New York, NY"
-    # single-type server-side filter -> every result carries that type
+    # employment_type is inferred from the title text, never assumed from
+    # the f_JT request filter
     assert intern.employment_type == "internship"
     assert intern.url == "https://www.linkedin.com/jobs/view/ml-engineering-intern-at-acme-1111111111"
     assert intern.posted_at is not None
@@ -156,6 +157,14 @@ def test_linkedin_parsing(monkeypatch):
 
     remote = by_title["Data Science Intern (Remote)"]
     assert remote.remote == "remote"
+
+    # Regression: a full-time-shaped title must NOT be force-labeled
+    # "internship" just because the search was filtered to f_JT=I —
+    # LinkedIn's guest search doesn't strictly enforce that filter, and
+    # this exact case (real posting: "Machine Learning Engineer" @ Intel)
+    # was leaking through mislabeled as an internship.
+    fulltime = by_title["Machine Learning Engineer"]
+    assert fulltime.employment_type != "internship"
 
 
 def test_linkedin_backs_off_on_rate_limit(monkeypatch):
@@ -178,7 +187,7 @@ def test_linkedin_backs_off_on_rate_limit(monkeypatch):
     # first 429 stops ALL further detail fetches for the run...
     assert len(detail_calls) == 1
     # ...but the jobs already parsed from the list are still returned
-    assert len(jobs) == 2
+    assert len(jobs) == 3
     assert all(j.description == "" for j in jobs)
 
 

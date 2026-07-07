@@ -53,7 +53,22 @@ def test_dealbreaker_is_deterministic():
 def test_employment_type_filter():
     assert employment_type_allowed("full-time", ["internship"]) is False
     assert employment_type_allowed("internship", ["internship"]) is True
-    assert employment_type_allowed("unknown", ["internship"]) is True  # score, don't drop
+
+
+def test_employment_type_unknown_passes_for_broad_selections():
+    # Most full-time postings never say "full-time" explicitly, so an
+    # unlabeled job should still get a chance rather than being dropped.
+    assert employment_type_allowed("unknown", ["full-time"]) is True
+    assert employment_type_allowed("unknown", ["internship", "full-time"]) is True
+    assert employment_type_allowed("unknown", []) is True
+
+
+def test_employment_type_unknown_rejected_for_internship_only():
+    # Regression: real internships are reliably self-labeled, so an
+    # unlabeled posting under an internship-ONLY search is much more
+    # likely a full-time role that slipped past upstream detection than
+    # a genuine internship — must not silently pass.
+    assert employment_type_allowed("unknown", ["internship"]) is False
 
 
 def test_posting_is_recent_filter_disabled_by_default():
