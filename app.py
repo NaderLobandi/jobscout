@@ -21,7 +21,8 @@ from dotenv import load_dotenv
 
 from src.agents import MODEL, drafting_agent, scoring_agent
 from src.guardrails import PIIMasker
-from src.intake import PROFILE_PATH, extract_resume_text, load_profile
+from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, extract_profile_text,
+                        list_profile_documents, load_profile)
 from src.memory import Memory
 from src.orchestrator import _relevance_rank, deterministic_filter
 from src.pipeline import fetch_jobs
@@ -100,6 +101,20 @@ def page_profile() -> None:
         if current_resume.exists():
             st.caption(f"✅ Current resume on file: `{current_resume.name}` "
                        "(upload to replace)")
+
+        extra_docs = st.file_uploader(
+            "Additional documents (optional) — LinkedIn export, past cover "
+            "letters, reference letters",
+            type=["pdf", "txt", "md"], accept_multiple_files=True,
+            help="Combined with your resume for richer grounding when "
+                 "analyzing your skills. PII-masked the same way. A "
+                 "reference letter's AUTHOR isn't detected as third-party "
+                 "PII — redact their name yourself first if that matters "
+                 "to you.")
+        existing_docs = list_profile_documents()
+        if existing_docs:
+            st.caption(f"📎 Already on file: {', '.join(existing_docs)} "
+                       "(uploads add to this list, don't replace it)")
 
         st.subheader("What you're looking for")
         c1, c2 = st.columns(2)
@@ -199,9 +214,18 @@ def page_profile() -> None:
         if resume_file is not None:
             current_resume.parent.mkdir(exist_ok=True)
             current_resume.write_bytes(resume_file.getvalue())
+        if extra_docs:
+            DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
+            for f in extra_docs:
+                # sanitize: strip any path component from the browser-supplied
+                # filename before writing, so an upload can't traverse out of
+                # profile/documents/
+                safe_name = Path(f.name).name
+                if safe_name:
+                    (DOCUMENTS_DIR / safe_name).write_bytes(f.getvalue())
         PROFILE_PATH.parent.mkdir(exist_ok=True)
         PROFILE_PATH.write_text(yaml.safe_dump(profile, sort_keys=False))
-        # A changed resume/profile invalidates the cached skills analysis
+        # A changed resume/profile/documents invalidates the cached analysis
         st.session_state.pop("skills_profile", None)
         st.success(f"Profile saved to `{PROFILE_PATH.relative_to(REPO_ROOT)}` "
                    "(gitignored). Head to **🚀 Run JobScout**.")
@@ -349,8 +373,9 @@ def page_run() -> None:
             to_score = jobs[:int(max_score)]
 
             if "skills_profile" not in st.session_state:
-                st.write("🧠 Analyzing your resume (PII-masked)…")
-                resume_text = masker.mask(extract_resume_text(profile))
+                st.write("🧠 Analyzing your resume + supplementary "
+                        "documents (PII-masked)…")
+                resume_text = masker.mask(extract_profile_text(profile))
                 summary = masker.mask(cand.get("summary", ""))
                 st.session_state["skills_profile"] = scoring_agent.analyze_resume(
                     st.session_state["client"], resume_text, summary)

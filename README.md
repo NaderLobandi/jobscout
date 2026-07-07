@@ -80,7 +80,10 @@ pip install -r requirements.txt
 cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env
 ```
 
-Optional: drop your resume at `profile/resume.pdf`.
+Optional: drop your resume at `profile/resume.pdf`. For richer scoring,
+also drop a LinkedIn export, past cover letters, or reference letters into
+`profile/documents/` (see `profile/documents/README.md`) — everything
+there is combined with your resume, masked the same way, before analysis.
 
 **Cost tip:** the agents default to `claude-opus-4-8`. For development, demo
 runs, and eval iterations, set `JOBSCOUT_MODEL=claude-haiku-4-5` in `.env` —
@@ -231,6 +234,7 @@ src/                         orchestrator, sub-agents, guardrails, memory,
                              intake, pipeline (UI helpers), records (history)
 app.py                       Streamlit UI (profile / run / history)
 profile/profile.example.yaml committed template (real profile is gitignored)
+profile/documents/           optional supplementary docs (gitignored except README)
 evals/                       golden set + LLM-as-judge harness
 tests/                       pytest for the deterministic parts
 Dockerfile                   deployability

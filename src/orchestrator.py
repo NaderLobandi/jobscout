@@ -32,7 +32,7 @@ from rich.table import Table
 from .agents import scoring_agent, drafting_agent, search_agent
 from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
                          violates_dealbreakers)
-from .intake import extract_resume_text, load_profile, run_wizard
+from .intake import extract_profile_text, load_profile, run_wizard
 from .memory import Memory
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -137,9 +137,10 @@ async def run(max_score: int, dry_run: bool) -> None:
 
     # ---- 4. Score (masked resume; per-dimension; weighted in code) --------
     client = Anthropic()  # key resolved from env / .env — never hardcoded
-    resume_text = masker.mask(extract_resume_text(profile))
+    resume_text = masker.mask(extract_profile_text(profile))
     summary = masker.mask(candidate.get("summary", ""))
-    console.print("[bold cyan]🧠 Analyzing resume (PII-masked)…[/bold cyan]")
+    console.print("[bold cyan]🧠 Analyzing resume + supplementary "
+                  "documents (PII-masked)…[/bold cyan]")
     skills_profile = scoring_agent.analyze_resume(client, resume_text, summary)
 
     prefs = profile.get("preferences", {})

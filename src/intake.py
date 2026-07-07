@@ -25,6 +25,8 @@ logging.getLogger("pypdf").setLevel(logging.ERROR)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROFILE_PATH = REPO_ROOT / "profile" / "profile.yaml"
 EXAMPLE_PATH = REPO_ROOT / "profile" / "profile.example.yaml"
+DOCUMENTS_DIR = REPO_ROOT / "profile" / "documents"
+SUPPORTED_DOC_SUFFIXES = (".pdf", ".txt", ".md")
 
 console = Console()
 
@@ -38,14 +40,9 @@ def load_profile() -> dict | None:
     return None
 
 
-def extract_resume_text(profile: dict) -> str:
-    """Plain text from the resume PDF (or .txt). Empty string if missing —
-    scoring still works from the profile summary alone."""
-    path_str = (profile.get("candidate") or {}).get("resume_path", "")
-    if not path_str:
-        return ""
-    path = (REPO_ROOT / path_str).resolve() if not Path(path_str).is_absolute() \
-        else Path(path_str)
+def _extract_text(path: Path) -> str:
+    """Plain text from a PDF, .txt, or .md file. Empty string on any
+    failure — a bad supplementary document should degrade, not crash."""
     if not path.exists():
         return ""
     if path.suffix.lower() == ".pdf":
@@ -53,7 +50,47 @@ def extract_resume_text(profile: dict) -> str:
             return "\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
         except Exception:
             return ""
-    return path.read_text(errors="ignore")
+    try:
+        return path.read_text(errors="ignore")
+    except Exception:
+        return ""
+
+
+def list_profile_documents() -> list[str]:
+    """Filenames currently saved under profile/documents/, for UI display."""
+    if not DOCUMENTS_DIR.exists():
+        return []
+    return sorted(
+        p.name for p in DOCUMENTS_DIR.iterdir()
+        if p.is_file() and p.suffix.lower() in SUPPORTED_DOC_SUFFIXES
+    )
+
+
+def extract_profile_text(profile: dict) -> str:
+    """Combined plain text from the resume PDF plus any supplementary
+    documents in profile/documents/ (LinkedIn export, past cover letters,
+    reference letters), each labeled by filename so the resume-analysis
+    skill can weight a resume bullet differently from an inferred claim
+    in a LinkedIn blurb. Empty string if nothing is present — scoring
+    still works from the profile summary alone."""
+    sections: list[str] = []
+
+    resume_path_str = (profile.get("candidate") or {}).get("resume_path", "")
+    if resume_path_str:
+        resume_path = (REPO_ROOT / resume_path_str).resolve() \
+            if not Path(resume_path_str).is_absolute() else Path(resume_path_str)
+        resume_text = _extract_text(resume_path)
+        if resume_text:
+            sections.append(f"--- Resume: {resume_path.name} ---\n{resume_text}")
+
+    for doc_path in (DOCUMENTS_DIR.iterdir() if DOCUMENTS_DIR.exists() else []):
+        if not doc_path.is_file() or doc_path.suffix.lower() not in SUPPORTED_DOC_SUFFIXES:
+            continue
+        text = _extract_text(doc_path)
+        if text:
+            sections.append(f"--- Supplementary document: {doc_path.name} ---\n{text}")
+
+    return "\n\n".join(sections)
 
 
 def _ask_list(prompt: str, default: str = "") -> list[str]:

@@ -5,6 +5,8 @@
 profile/profile.yaml
 profile/resume.pdf
 profile/*.pdf
+profile/documents/*
+!profile/documents/README.md
 
 # Runtime artifacts
 logs/

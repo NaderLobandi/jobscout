@@ -7,10 +7,13 @@ This spec is the source of truth. If code and spec conflict, the spec wins.
 JobScout is a personal job-search **concierge agent**. It:
 
 1. Interviews the user about preferences (intake wizard → `profile/profile.yaml`)
+   and optionally ingests supplementary documents (LinkedIn export, past
+   cover letters, reference letters) from `profile/documents/`
 2. Searches many job boards through **one** normalized MCP tool
 3. Deterministically filters hard dealbreakers before any LLM call
-4. Scores each surviving job against the (PII-masked) resume + preferences,
-   with a weighted per-dimension breakdown and plain-language rationale
+4. Scores each surviving job against the (PII-masked) resume + supplementary
+   documents + preferences, with a weighted per-dimension breakdown and
+   plain-language rationale
 5. Drafts a tailored cover letter + resume tweak suggestions for strong matches
 6. **Stops at a human-in-the-loop gate.** The user reviews and applies manually
    via the job URL. JobScout never auto-submits.
