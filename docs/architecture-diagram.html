@@ -1,0 +1,195 @@
+<style>
+  :root{
+    --bg:#eef1f4; --panel:#ffffff; --panel-2:#e4e9ef; --ink:#171b22; --muted:#57616f;
+    --line:rgba(23,27,34,0.14); --gate:#c97f1d; --gate-ink:#2a1a03; --flow:#177a70;
+    --ok:#2f8f5b; --no:#b23f35; --shadow:rgba(23,27,34,0.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#12151b; --panel:#1a1f28; --panel-2:#212836; --ink:#e9e6dd; --muted:#93a0b0;
+      --line:rgba(147,160,176,0.18); --gate:#e8a33d; --gate-ink:#1c1204; --flow:#57c9bb;
+      --ok:#5cc98b; --no:#e2766c; --shadow:rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#12151b; --panel:#1a1f28; --panel-2:#212836; --ink:#e9e6dd; --muted:#93a0b0;
+    --line:rgba(147,160,176,0.18); --gate:#e8a33d; --gate-ink:#1c1204; --flow:#57c9bb;
+    --ok:#5cc98b; --no:#e2766c; --shadow:rgba(0,0,0,0.35);
+  }
+  :root[data-theme="light"]{
+    --bg:#eef1f4; --panel:#ffffff; --panel-2:#e4e9ef; --ink:#171b22; --muted:#57616f;
+    --line:rgba(23,27,34,0.14); --gate:#c97f1d; --gate-ink:#2a1a03; --flow:#177a70;
+    --ok:#2f8f5b; --no:#b23f35; --shadow:rgba(23,27,34,0.08);
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  .page{
+    min-height:100vh; background:var(--bg); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:40px 16px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, "Roboto Mono", monospace;
+    color:var(--ink);
+  }
+
+  .stage{
+    width:100%; max-width:1180px; aspect-ratio:16/9; position:relative;
+    background:var(--panel); border:1px solid var(--line); border-radius:6px;
+    box-shadow:0 20px 60px -20px var(--shadow);
+    padding:36px 44px 28px; overflow:hidden;
+    display:flex; flex-direction:column; gap:22px;
+  }
+  .grid{
+    position:absolute; inset:0; pointer-events:none; opacity:0.55;
+    background-image:
+      repeating-linear-gradient(0deg, var(--line) 0 1px, transparent 1px 40px),
+      repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 40px);
+    mask-image: radial-gradient(ellipse at 50% 30%, black 55%, transparent 92%);
+  }
+
+  .hdr{position:relative; z-index:1;}
+  .eyebrow{
+    font-size:11px; letter-spacing:0.18em; color:var(--muted); font-weight:600;
+  }
+  h1{
+    margin:6px 0 0; font-size:clamp(22px, 3vw, 32px); line-height:1.15;
+    font-weight:700; text-wrap:balance; letter-spacing:-0.01em;
+  }
+  h1 .accent{color:var(--gate);}
+  .tagline{margin:8px 0 0; font-size:13px; color:var(--muted); letter-spacing:0.01em;}
+
+  .pipeline{
+    position:relative; z-index:1; flex:1; display:flex; align-items:stretch;
+    gap:0; min-height:0;
+  }
+  .node{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:4px;
+    padding:14px 16px; display:flex; flex-direction:column; gap:8px;
+    min-width:0;
+  }
+  .node.intake{flex:1.05;}
+  .node.orch{flex:1.25;}
+  .node.mcp{flex:2.1;}
+  .node.gate{
+    flex:1.05; background:var(--gate); color:var(--gate-ink); border-color:var(--gate);
+    background-image:repeating-linear-gradient(-45deg,
+      rgba(0,0,0,0.08) 0 8px, transparent 8px 16px);
+    justify-content:center;
+  }
+  .node.gate .n-label, .node.gate .n-body{color:var(--gate-ink);}
+
+  .n-label{
+    font-size:10.5px; font-weight:700; letter-spacing:0.14em; color:var(--muted);
+  }
+  .node.gate .n-label{font-size:12px;}
+  .n-body{font-size:11.5px; color:var(--ink); line-height:1.5;}
+  .n-sub{
+    font-size:10.5px; color:var(--flow); border:1px solid var(--line);
+    border-radius:3px; padding:3px 7px; display:inline-block; width:fit-content;
+  }
+  .n-subs{display:flex; flex-direction:column; gap:4px; margin-top:2px;}
+
+  .fanout{
+    display:flex; flex-wrap:wrap; gap:5px; margin-top:auto; padding-top:6px;
+    border-top:1px dashed var(--line);
+  }
+  .chip{
+    font-size:10px; color:var(--flow); background:transparent; border:1px solid var(--flow);
+    border-radius:2px; padding:2px 6px; opacity:0.85; white-space:nowrap;
+  }
+
+  .connector{
+    flex:0 0 34px; position:relative; align-self:center; height:2px;
+    background:var(--line); margin:0 2px;
+  }
+  .connector::after{
+    content:""; position:absolute; right:-1px; top:50%; transform:translateY(-50%);
+    width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent;
+    border-left:7px solid var(--line);
+  }
+
+  .outcomes{
+    position:relative; z-index:1; display:flex; gap:14px; font-size:11.5px;
+  }
+  .outcome{
+    flex:1; display:flex; align-items:center; gap:8px; padding:9px 12px;
+    border:1px solid var(--line); border-radius:4px; background:var(--panel-2);
+  }
+  .dot{width:8px; height:8px; border-radius:50%; flex:0 0 auto;}
+  .outcome.ok .dot{background:var(--ok);}
+  .outcome.no .dot{background:var(--no);}
+  .outcome.no strong{color:var(--no);}
+
+  .ftr{
+    position:relative; z-index:1; display:flex; gap:10px; align-items:center;
+    font-size:10.5px; color:var(--muted); letter-spacing:0.02em;
+  }
+  .ftr span:nth-child(even){opacity:0.5;}
+
+  .note{
+    margin-top:18px; font-size:12px; color:var(--muted); text-align:center;
+    max-width:640px; line-height:1.6;
+  }
+</style>
+
+<div class="page">
+  <div class="stage">
+    <div class="grid"></div>
+    <div class="hdr">
+      <div class="eyebrow">SYSTEM SCHEMATIC — JOBSCOUT</div>
+      <h1>Search, score, draft — <span class="accent">then stop.</span></h1>
+      <p class="tagline">Multi-agent pipeline · one MCP server over seven job boards · human approval gate</p>
+    </div>
+
+    <div class="pipeline">
+      <div class="node intake">
+        <div class="n-label">01 · INTAKE</div>
+        <div class="n-body">Profile, resume, preferences, dealbreakers.</div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="node orch">
+        <div class="n-label">02 · ORCHESTRATOR</div>
+        <div class="n-subs">
+          <span class="n-sub">search agent</span>
+          <span class="n-sub">scoring agent</span>
+          <span class="n-sub">drafting agent</span>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="node mcp">
+        <div class="n-label">03 · MCP SERVER</div>
+        <div class="n-body">search_jobs · get_job_details · list_sources — one tool, concurrent fan-out, GET-only</div>
+        <div class="fanout">
+          <span class="chip">RemoteOK</span><span class="chip">The Muse</span>
+          <span class="chip">Remotive</span><span class="chip">Arbeitnow</span>
+          <span class="chip">Greenhouse</span><span class="chip">Adzuna</span>
+          <span class="chip">USAJOBS</span>
+        </div>
+      </div>
+      <div class="connector"></div>
+
+      <div class="node gate">
+        <div class="n-label">04 · HITL GATE</div>
+        <div class="n-body">human decision required</div>
+      </div>
+    </div>
+
+    <div class="outcomes">
+      <div class="outcome ok">
+        <span class="dot"></span> Approve → apply manually at the job URL
+      </div>
+      <div class="outcome no">
+        <span class="dot"></span> Auto-submit → <strong>no code path exists</strong>
+      </div>
+    </div>
+
+    <div class="ftr">
+      <span>PII masking</span><span>·</span><span>audit log</span><span>·</span>
+      <span>deterministic filters</span><span>·</span><span>least privilege</span>
+    </div>
+  </div>
+
+  <p class="note">Screenshot the panel above (crop to its edges) for your Kaggle
+  cover image or an inline architecture image in the Writeup / README.</p>
+</div>

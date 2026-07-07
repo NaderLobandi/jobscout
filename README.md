@@ -2,6 +2,18 @@
 
 **Kaggle "AI Agents: Intensive Vibe Coding Capstone" — Concierge Agents track.**
 
+## The problem
+
+Job searching is mostly mechanical: opening tabs across a dozen boards,
+re-reading the same boilerplate per posting, and rewriting a cover letter
+that says the same four things in a different order. The part that actually
+requires judgment — does this specific posting fit this specific person's
+skills, preferences, and dealbreakers — is a small fraction of the time
+spent. The tempting fix is to automate the whole thing end to end, including
+submission. JobScout automates everything **except** that last step.
+
+## The solution
+
 JobScout interviews you about what you want, searches many job boards through
 **one custom MCP server**, scores every job against your (PII-masked) resume
 with a per-dimension rationale, drafts tailored application materials for
