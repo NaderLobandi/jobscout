@@ -8,6 +8,7 @@ agent integrates with ONE schema instead of N board formats x M consumers.
 from __future__ import annotations
 
 import hashlib
+import html
 import re
 from datetime import datetime
 
@@ -49,10 +50,16 @@ _WS_RE = re.compile(r"\s+")
 
 
 def strip_html(text: str) -> str:
-    """Job boards return HTML descriptions; agents want plain text."""
-    text = _TAG_RE.sub(" ", text or "")
-    text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-    text = text.replace("&nbsp;", " ").replace("&#39;", "'").replace("&quot;", '"')
+    """Job boards return HTML descriptions; agents want plain text.
+
+    Decode entities BEFORE stripping tags, not after: some boards (e.g.
+    Greenhouse's `content=true` field) return the markup itself
+    entity-escaped — literal '&lt;div&gt;' text, not a '<div>' tag — so
+    the tag regex has nothing to match until entities are decoded first.
+    Stripping first and decoding after (the previous order here) merely
+    unescapes the tags back into literal, un-stripped HTML."""
+    text = html.unescape(text or "")
+    text = _TAG_RE.sub(" ", text)
     return _WS_RE.sub(" ", text).strip()
 
 
