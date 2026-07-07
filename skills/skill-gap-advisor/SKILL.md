@@ -29,8 +29,8 @@ sample per-job scores + reasons.
 3. Keep it under 120 words. This is a nudge, not a report.
 
 Rules:
-- Ground every suggestion in the actual sample reasons given — do not
-  invent a gap that isn't evidenced in the data.
+- Ground every suggestion in the actual sample reasons given — invent
+  nothing, even to sound more actionable than the data supports.
 - If the sample reasons point to a structural mismatch the candidate
   can't fix by learning something (e.g., a location preference clashing
   with onsite-only postings), say so plainly rather than forcing a

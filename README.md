@@ -179,6 +179,13 @@ npx @modelcontextprotocol/inspector .venv/bin/python mcp-server/job_search_serve
 7. **Untrusted input handling** — job descriptions are wrapped in
    `<job_posting>` tags and the agents are instructed to ignore any
    instructions embedded in them.
+8. **Repeated anti-fabrication constraints** — "invent nothing, even to
+   make the case stronger" and "acknowledge a genuine gap rather than
+   hide it" are restated independently in all five skill files, not
+   centralized in one. Each skill call is a separate LLM invocation with
+   only its own system prompt — there's no shared context for one
+   skill's discipline to "carry over" into another's, so each skill
+   states its own version of the same rule rather than relying on it.
 
 ## Job sources
 

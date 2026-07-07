@@ -29,7 +29,11 @@ you know where each claim comes from.
    for every job scored this session, so keep it dense and factual.
 
 Rules:
-- Do not invent skills that are not evidenced anywhere in the provided text.
+- Do not invent skills that are not evidenced anywhere in the provided
+  text — invent nothing, even to make the profile look stronger.
+- Don't pad a thin section to look more substantial than it is — a
+  shorter, honest skills list is more useful downstream than an
+  inflated one.
 - A claim stated as a concrete resume bullet is higher-confidence than one
   only implied by a LinkedIn "About" blurb, a cover letter's framing, or a
   reference letter's praise. When a skill or achievement comes primarily
