@@ -146,9 +146,11 @@ def hitl_gate(package: dict) -> str:
     reviewing, not an automated bypass).
     """
     job = package["job"]
+    source_label = job["source"] + (f" ({job['publisher']})"
+                                    if job.get("publisher") else "")
     console.print(Panel(
         f"[bold]{job['title']}[/bold] @ {job['company']}\n"
-        f"{job['location']}  ·  {job['remote']}  ·  {job['source']}\n"
+        f"{job['location']}  ·  {job['remote']}  ·  {source_label}\n"
         f"[cyan]{job['url']}[/cyan]\n\n"
         f"[bold]Score: {package['score']:.0f}/100[/bold]\n"
         + "\n".join(f"  {dim:18} {d['score']:>3}/100 — {d['reason']}"

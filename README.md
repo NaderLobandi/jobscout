@@ -43,9 +43,9 @@ the human-in-the-loop checkpoint is the core of JobScout's security design.
         │  · drafting + skills  │   │  list_sources               │
         └───────────────────────┘   └──────────┬──────────────────┘
                                                │ concurrent fan-out, GET-only
-                       ┌───────────┬───────────┼───────────┬─────────────┐
-                   RemoteOK    The Muse    Remotive    Arbeitnow    Greenhouse
-                                     (+ Adzuna, USAJOBS with free keys)
+          ┌──────────┬──────────┼──────────┬───────────┬─────────┬─────────┐
+       RemoteOK   The Muse  Remotive  Arbeitnow  Greenhouse   Lever     Ashby
+     (+ JSearch, Adzuna, USAJOBS with free keys · LinkedIn opt-in, see ⚠️)
 
   Guardrails wrap everything (src/guardrails.py):
   PII masking ⇄ unmasking · audit log (logs/audit.jsonl) · HITL hard stop
@@ -84,6 +84,10 @@ Optional: drop your resume at `profile/resume.pdf`. For richer scoring,
 also drop a LinkedIn export, past cover letters, or reference letters into
 `profile/documents/` (see `profile/documents/README.md`) — everything
 there is combined with your resume, masked the same way, before analysis.
+On the **👤 Profile** page, a "🔍 Preview PDF text extraction" panel lets
+you check what text actually got pulled out of your PDFs before any of it
+reaches an LLM — useful for catching a scanned/image-only resume with no
+real text layer.
 
 **Cost tip:** the agents default to `claude-opus-4-8`. For development, demo
 runs, and eval iterations, set `JOBSCOUT_MODEL=claude-haiku-4-5` in `.env` —
@@ -113,12 +117,14 @@ guardrails, and agents):
   deterministic **keyword-coverage check** against the posting (no LLM
   call — which of the posting's own key terms actually made it into the
   letter), and **Approve / Reject / Skip** buttons — the HITL gate as a UI.
-- **📚 History** — every job ever scored, with scores, decisions, links,
-  and saved cover letters (`.jobscout_records.json`, gitignored), plus a
-  JSON export. Opens with a **recurring-gaps** view: which scoring
-  dimension consistently drags you down across your whole history (pure
-  aggregation, free, no LLM call), with an on-demand button to get a
-  short, evidence-grounded suggestion for the weakest one.
+- **📚 History** — every job ever scored, with scores, decisions, the date
+  you decided, and saved cover letters (`.jobscout_records.json`,
+  gitignored), plus a JSON export. Each entry expands into its full
+  per-dimension score breakdown and draft, so the summary table's score
+  always has somewhere to drill into. Opens with a **recurring-gaps**
+  view: which scoring dimension consistently drags you down across your
+  whole history (pure aggregation, free, no LLM call), with an on-demand
+  button to get a short, evidence-grounded suggestion for the weakest one.
 
 ### CLI
 
@@ -196,13 +202,56 @@ npx @modelcontextprotocol/inspector .venv/bin/python mcp-server/job_search_serve
 | Remotive | no | ✅ live |
 | Arbeitnow | no | ✅ live |
 | Greenhouse (per-company) | no | ✅ live |
+| Lever (per-company) | no | ✅ live — structured internship detection |
+| Ashby (per-company) | no | ✅ live — structured internship detection; dominant ATS among recent YC-batch startups |
+| LinkedIn | no | ⚠️ opt-in only, disabled by default — read the disclaimer below |
+| JSearch (Google for Jobs) | free key | ✅ implemented — includes postings published on Indeed, Glassdoor, ZipRecruiter |
 | Adzuna | free key | ✅ implemented, enabled when keys present |
 | USAJOBS | free key | ✅ implemented, enabled when keys present |
 
-LinkedIn, Indeed, and Glassdoor are **deliberately excluded**: they expose no
-public API and scraping violates their ToS. JobScout only talks to
-official/public JSON APIs — a compliance decision, not a technical gap.
-Adding a board = one adapter file implementing `JobSourceAdapter.search()`.
+**Indeed and Glassdoor have no direct adapters — but their postings are
+still covered.** Both sites sit behind active anti-bot walls (HTTP 403 +
+CAPTCHA even for a logged-out browser), so unlike LinkedIn's open guest
+endpoint there is nothing to access without *defeating* security
+countermeasures — a line JobScout doesn't cross, opt-in or not. Instead,
+the **JSearch** source queries Google for Jobs, which legitimately
+indexes Indeed's and Glassdoor's listings, through a real keyed JSON API
+(free tier, no card). Each job records the origin board in its
+`publisher` field, so Glassdoor (and Indeed) postings stay identifiable:
+the Run and History views show `via jsearch (Glassdoor)`, and History has
+a dedicated **publisher** column you can scan. When a posting offers a
+Glassdoor or Indeed apply link among its options, JobScout links to that
+one (preferring a direct-apply link).
+Adding a board = one adapter file implementing
+`JobSourceAdapter.search()`.
+
+### ⚠️ LinkedIn disclaimer — read before enabling
+
+LinkedIn has **no official jobs API**, and its
+[User Agreement](https://www.linkedin.com/legal/user-agreement) prohibits
+automated access. The optional LinkedIn source exists because many
+postings — internships especially — appear there first, but **enabling it
+is a deliberate, at-your-own-risk decision that JobScout will not make
+for you**: it stays off until you both add `linkedin` to your enabled
+boards *and* check the explicit acknowledgment box (UI) / answer yes in
+the wizard (CLI), which sets `sources.linkedin_tos_acknowledged: true`.
+
+What JobScout does to keep the risk as low as it can be made:
+
+- **Never touches your LinkedIn account.** No login, no cookies, no
+  credentials — only the public guest endpoint a logged-out browser
+  sees, under JobScout's own honest User-Agent. The realistic worst
+  case is a temporary IP rate-limit, not an account ban.
+- **Minimal request volume.** One search request per run (first page
+  only), plus full-description fetches for at most 8 jobs, at least one
+  second apart.
+- **Backs off immediately.** Any rate-limit response (HTTP 429/999)
+  stops every remaining LinkedIn request for that run.
+- **Read-only**, like every other adapter — GET requests only.
+
+None of that changes what it is: automated access that LinkedIn's terms
+prohibit. If that trade-off isn't acceptable to you, leave it off — every
+other source is unaffected.
 
 ## Deployment / path to production
 
@@ -241,7 +290,7 @@ Path to production:
 CLAUDE.md                    agent operating rules (spec-first, security)
 specs/                       source of truth: design + BDD scenarios
 skills/                      5 Agent Skills (progressive disclosure)
-mcp-server/                  MCP server + normalized schema + 7 adapters
+mcp-server/                  MCP server + normalized schema + 11 adapters
 src/                         orchestrator, sub-agents, guardrails, memory,
                              intake, pipeline (UI helpers), records (history)
 app.py                       Streamlit UI (profile / run / history)

@@ -23,8 +23,8 @@ from src.agents import MODEL, drafting_agent, insights_agent, scoring_agent
 from src.guardrails import PIIMasker
 from src.insights import aggregate_dimension_gaps
 from src.keyword_coverage import keyword_coverage
-from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, extract_profile_text,
-                        list_profile_documents, load_profile)
+from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, extract_all_saved_documents,
+                        extract_profile_text, list_profile_documents, load_profile)
 from src.memory import Memory
 from src.orchestrator import _relevance_rank, deterministic_filter
 from src.pipeline import fetch_jobs
@@ -36,7 +36,7 @@ load_dotenv(REPO_ROOT / ".env")
 st.set_page_config(page_title="JobScout", page_icon="🔭", layout="wide")
 
 ALL_SOURCES = ["remoteok", "themuse", "remotive", "arbeitnow", "greenhouse",
-               "adzuna", "usajobs"]
+               "lever", "ashby", "linkedin", "jsearch", "adzuna", "usajobs"]
 REMOTE_PREFS = ["remote_or_hybrid", "remote_only", "hybrid", "onsite", "any"]
 EMPLOYMENT_TYPES = ["full-time", "part-time", "internship", "contract"]
 SENIORITY = ["junior", "mid", "senior", "staff"]
@@ -54,6 +54,14 @@ def _csv(text: str) -> list[str]:
 def score_badge(score: float, threshold: int) -> str:
     dot = "🟢" if score >= threshold else ("🟡" if score >= 50 else "🔴")
     return f"{dot} {score:.0f}"
+
+
+def _source_label(job: dict) -> str:
+    """Aggregator sources (jsearch) carry a distinct origin board in
+    `publisher` — show it so Glassdoor/Indeed listings are identifiable."""
+    src = job.get("source", "")
+    pub = job.get("publisher")
+    return f"{src} ({pub})" if pub else src
 
 
 # ---------------------------------------------------------------------------
@@ -185,11 +193,38 @@ def page_profile() -> None:
             "Enabled boards", ALL_SOURCES,
             default=[s for s in sources.get(
                 "enabled", ["remoteok", "themuse", "remotive", "arbeitnow",
-                            "greenhouse"]) if s in ALL_SOURCES],
-            help="Adzuna/USAJOBS also need free API keys in .env")
+                            "greenhouse", "lever", "ashby"]) if s in ALL_SOURCES],
+            help="JSearch (Google for Jobs — includes Indeed/Glassdoor "
+                 "postings), Adzuna, and USAJOBS also need free API keys "
+                 "in .env")
         gh_companies = st.text_input(
             "Greenhouse companies to watch (board tokens, comma-separated)",
             ", ".join(sources.get("greenhouse_companies", ["anthropic"])))
+        c1, c2 = st.columns(2)
+        lever_companies = c1.text_input(
+            "Lever companies to watch (board tokens, comma-separated)",
+            ", ".join(sources.get("lever_companies", [])),
+            help="Startup-heavy ATS. Postings label internships explicitly, "
+                 "so JobScout detects them exactly instead of guessing.")
+        ashby_companies = c2.text_input(
+            "Ashby companies to watch (org names, comma-separated)",
+            ", ".join(sources.get("ashby_companies", [])),
+            help="The dominant ATS among recent YC-batch startups — good "
+                 "coverage if you're hunting for internships there.")
+
+        st.warning(
+            "⚠️ **LinkedIn is different from every other source.** It has no "
+            "official jobs API; JobScout can only reach it through LinkedIn's "
+            "public no-login guest endpoint, and automated access to it "
+            "violates LinkedIn's User Agreement. JobScout minimizes the risk "
+            "— no login or cookies ever touch LinkedIn, requests are few and "
+            "slow, and any rate-limit response stops all LinkedIn traffic "
+            "for the run — but the ToS risk cannot be reduced to zero. "
+            "Enabling it above does nothing until you also accept this here.")
+        linkedin_ack = st.checkbox(
+            "I understand automated access violates LinkedIn's ToS and I "
+            "enable the LinkedIn source at my own risk",
+            value=bool(sources.get("linkedin_tos_acknowledged", False)))
 
         saved = st.form_submit_button("💾 Save profile", type="primary")
 
@@ -219,6 +254,9 @@ def page_profile() -> None:
             "sources": {
                 "enabled": enabled,
                 "greenhouse_companies": _csv(gh_companies),
+                "lever_companies": _csv(lever_companies),
+                "ashby_companies": _csv(ashby_companies),
+                "linkedin_tos_acknowledged": bool(linkedin_ack),
             },
         }
         if resume_file is not None:
@@ -239,6 +277,27 @@ def page_profile() -> None:
         st.session_state.pop("skills_profile", None)
         st.success(f"Profile saved to `{PROFILE_PATH.relative_to(REPO_ROOT)}` "
                    "(gitignored). Head to **🚀 Run JobScout**.")
+        if "linkedin" in enabled and not linkedin_ack:
+            st.error("LinkedIn is in your enabled boards but the ToS-risk "
+                     "acknowledgment box is unchecked — LinkedIn will stay "
+                     "OFF until you check it and re-save.")
+
+    st.divider()
+    with st.expander("🔍 Preview PDF text extraction"):
+        st.caption("Runs the same extraction used before scoring, on whatever "
+                   "resume/documents are currently saved — catches a scanned "
+                   "or image-only PDF with no real text layer before it "
+                   "silently produces an empty or garbled profile.")
+        if st.button("Extract now"):
+            extracted = extract_all_saved_documents()
+            if not extracted.strip():
+                st.warning("No text extracted. Either no resume/documents are "
+                           "saved yet, or the PDF has no selectable text layer "
+                           "(common with scanned/image-only PDFs) — try "
+                           "re-exporting it from a text editor instead.")
+            else:
+                st.text_area("Extracted text", extracted, height=300)
+                st.caption(f"{len(extracted)} characters extracted.")
 
 
 # ---------------------------------------------------------------------------
@@ -287,7 +346,7 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
         with meta:
             st.markdown(f"**{job['company']}**")
             st.caption(f"{job['location'] or '—'} · {job['remote']} · "
-                       f"via {job['source']}")
+                       f"via {_source_label(job)}")
             st.link_button("Open job posting ↗", job["url"])
             st.metric("Weighted score", f"{package['score']:.0f}/100")
         with dims:
@@ -507,7 +566,9 @@ def page_history() -> None:
         "company": e["job"]["company"],
         "location": e["job"].get("location", ""),
         "source": e["job"].get("source", ""),
+        "publisher": e["job"].get("publisher") or "",
         "decision": e.get("decision") or "undecided",
+        "date_applied": (e.get("decided_at") or "")[:10],
         "url": e["job"]["url"],
     } for e in entries])
     st.dataframe(
@@ -515,16 +576,47 @@ def page_history() -> None:
         column_config={
             "url": st.column_config.LinkColumn("posting", display_text="open ↗"),
             "score": st.column_config.NumberColumn(format="%.0f"),
+            "date_applied": st.column_config.TextColumn("date applied"),
+            "publisher": st.column_config.TextColumn(
+                "publisher", help="Origin board for aggregator sources "
+                "(e.g. Glassdoor via jsearch)"),
         })
 
-    drafted = [e for e in entries if e.get("cover_letter")]
-    if drafted:
-        st.subheader("✉️ Saved application drafts")
-        for e in drafted:
-            with st.expander(f"{e['job']['title']} @ {e['job']['company']} "
-                             f"({e.get('decision') or 'undecided'})"):
-                st.text_area("Cover letter", e["cover_letter"], height=280,
-                             key=f"hist_letter_{e['job']['id']}")
+    st.subheader("🔍 Job details")
+    st.caption("Expand a row for the full score breakdown and — for jobs "
+              "that got that far — the saved application draft.")
+    for e in entries:
+        job = e["job"]
+        score = e.get("score")
+        decision = e.get("decision") or "undecided"
+        badge = {"approved": "✅ approved", "rejected": "❌ rejected",
+                 "skipped": "⏭ skipped"}.get(decision, "🕓 undecided")
+        score_label = f"{score:.0f}/100" if score is not None else "—"
+        with st.expander(f"{score_label} — **{job['title']}** @ "
+                         f"{job['company']}  {badge}"):
+            meta, dims = st.columns([1, 2])
+            with meta:
+                st.caption(f"{job.get('location') or '—'} · "
+                          f"{job.get('remote', '')} · via {_source_label(job)}")
+                st.link_button("Open job posting ↗", job["url"],
+                               key=f"hist_link_{job['id']}")
+                st.metric("Weighted score", score_label)
+                st.caption(f"Decision: **{decision}**")
+                if e.get("decided_at"):
+                    st.caption(f"Date applied: {e['decided_at'][:10]}")
+            with dims:
+                for dim, d in (e.get("dimensions") or {}).items():
+                    clamped = max(0, min(int(d["score"]), 100))
+                    st.progress(clamped / 100,
+                               text=f"**{dim.replace('_', ' ')} — {d['score']}**"
+                                    f"  ·  {d['reason']}")
+            if e.get("summary"):
+                st.markdown(f"*{e['summary']}*")
+
+            if e.get("cover_letter"):
+                st.divider()
+                st.text_area("✉️ Cover letter", e["cover_letter"], height=280,
+                             key=f"hist_letter_{job['id']}")
                 if e.get("resume_tweaks"):
                     st.markdown("**Resume tweaks**")
                     st.markdown(e["resume_tweaks"])

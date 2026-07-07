@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PROFILE_PATH = REPO_ROOT / "profile" / "profile.yaml"
 EXAMPLE_PATH = REPO_ROOT / "profile" / "profile.example.yaml"
 DOCUMENTS_DIR = REPO_ROOT / "profile" / "documents"
+RESUME_PATH = REPO_ROOT / "profile" / "resume.pdf"
 SUPPORTED_DOC_SUFFIXES = (".pdf", ".txt", ".md")
 
 console = Console()
@@ -93,6 +94,13 @@ def extract_profile_text(profile: dict) -> str:
     return "\n\n".join(sections)
 
 
+def extract_all_saved_documents() -> str:
+    """Same extraction as extract_profile_text(), but keyed off whatever is
+    already saved on disk rather than a profile dict — lets the UI preview
+    what the LLM will actually see before or without a saved profile.yaml."""
+    return extract_profile_text({"candidate": {"resume_path": str(RESUME_PATH)}})
+
+
 def _ask_list(prompt: str, default: str = "") -> list[str]:
     raw = Prompt.ask(prompt, default=default)
     return [x.strip() for x in raw.split(",") if x.strip()]
@@ -129,6 +137,15 @@ def run_wizard() -> dict:
     must_haves = _ask_list("Must-haves (comma-separated, optional)", "")
     dealbreakers = _ask_list("Dealbreakers (comma-separated, optional)", "")
 
+    console.print(
+        "\n[yellow]⚠️  LinkedIn has no official jobs API. JobScout can reach "
+        "it only via LinkedIn's public no-login guest endpoint, and automated "
+        "access to it violates LinkedIn's User Agreement. JobScout never "
+        "sends your login or cookies there and keeps requests few and slow, "
+        "but the ToS risk cannot be reduced to zero.[/yellow]")
+    linkedin_ack = Confirm.ask(
+        "Enable the LinkedIn source anyway, at your own risk?", default=False)
+
     profile = {
         "candidate": {
             "name": name, "email": email, "phone": phone,
@@ -154,10 +171,17 @@ def run_wizard() -> dict:
         },
         "draft_threshold": 70,
         "sources": {
-            "enabled": ["remoteok", "themuse", "remotive", "arbeitnow", "greenhouse"],
+            "enabled": ["remoteok", "themuse", "remotive", "arbeitnow",
+                        "greenhouse", "lever", "ashby"]
+                       + (["linkedin"] if linkedin_ack else []),
             "greenhouse_companies": _ask_list(
                 "Greenhouse companies to watch (tokens, e.g. anthropic, stripe)",
                 "anthropic"),
+            "lever_companies": _ask_list(
+                "Lever companies to watch (tokens, optional)", ""),
+            "ashby_companies": _ask_list(
+                "Ashby companies to watch (org names, optional)", ""),
+            "linkedin_tos_acknowledged": linkedin_ack,
         },
     }
     PROFILE_PATH.parent.mkdir(exist_ok=True)

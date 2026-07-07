@@ -30,9 +30,9 @@ JobScout is a personal job-search **concierge agent**. It:
 ┌─────▼──────────┐        ┌───────▼───────────────────────┐
 │ Sub-agents     │        │ Adapters: remoteok, themuse,  │
 │  search        │        │ remotive, arbeitnow,          │
-│  scoring       │        │ greenhouse, (adzuna, usajobs) │
-│  drafting      │        └───────────────────────────────┘
-└────────────────┘
+│  scoring       │        │ greenhouse, lever, ashby,     │
+│  drafting      │        │ (adzuna, usajobs)             │
+└────────────────┘        └───────────────────────────────┘
 Guardrails wrap everything: PII masking in/out, audit log, HITL gate.
 Memory (.jobscout_memory.json) dedupes across sessions.
 ```
@@ -86,7 +86,8 @@ Five components per the course framework: **model** (Claude API),
 | salary_min / salary_max | int? | USD/yr where known |
 | description | str | plain text, HTML stripped |
 | url | str | apply link |
-| source | str | adapter name |
+| source | str | adapter name that fetched it |
+| publisher | str? | origin board for aggregators (e.g. "Glassdoor" via jsearch); None for direct adapters |
 | posted_at | datetime? | |
 
 ### SearchQuery
@@ -143,10 +144,49 @@ The weighted total is computed in **deterministic Python** from
 
 ## 5. Sources
 
-Tier A (no key): remoteok, themuse, remotive, arbeitnow, greenhouse
-(per-company tokens). Tier B (free key, stubbed if not built): adzuna,
-usajobs. Deliberately excluded: LinkedIn/Indeed/Glassdoor (no public API;
-scraping violates ToS).
+Tier A (no key): remoteok, themuse, remotive, arbeitnow, greenhouse, lever,
+ashby (the last three take per-company/org board tokens). Tier B (free
+key, stubbed if not built): adzuna, usajobs, jsearch.
+
+**Indeed and Glassdoor have no adapters, and won't.** Unlike LinkedIn's
+open guest endpoint (plain HTTP 200, no protection to bypass), both sites
+return HTTP 403 with active anti-bot walls — Cloudflare CAPTCHA on
+Indeed, a hard block on Glassdoor — even to a logged-out browser
+(verified 2026-07). Reaching them would mean *defeating* those
+countermeasures (CAPTCHA solvers, stealth browsers, proxy rotation),
+which is a different category of act than using an unprotected public
+endpoint, and is out of scope regardless of opt-in. Their postings are
+instead reachable through the front door: **jsearch** (Tier B) queries
+Google for Jobs, which legitimately indexes Indeed's and Glassdoor's
+listings; each result's publisher is visible via its apply URL.
+
+Tier C (ToS-risk, explicit opt-in only): **linkedin**. Uses LinkedIn's
+unauthenticated public guest endpoints (`jobs-guest/jobs/api/...`) — the
+same public pages a logged-out browser sees, but automated access still
+violates LinkedIn's User Agreement. Added as an explicit owner decision
+(most postings appear on LinkedIn first, especially internships).
+Safety posture, in priority order:
+
+1. Disabled by default; enabling requires BOTH `linkedin` in
+   `sources.enabled` AND `sources.linkedin_tos_acknowledged: true`.
+2. No login, no cookies, no credentials — nothing that can tie traffic to
+   the user's LinkedIn account, so the worst realistic outcome is an IP
+   rate-limit, not an account ban.
+3. GET-only, single search request per run (first result page only, ≤25
+   jobs), plus description fetches for at most 8 jobs with a ≥1s delay
+   between each.
+4. Any 429/999 response aborts all remaining LinkedIn requests for the
+   run — jobs already parsed are returned with whatever data they have.
+5. Server-side filters (`f_JT` employment type, `f_WT` remote) narrow
+   results at the source so no requests are spent on jobs the
+   deterministic filter would drop anyway.
+
+Lever and Ashby postings carry a structured commitment/employment-type
+field ("Internship", "Intern", ...) instead of requiring free-text
+guessing — `guess_employment_type()` is only a fallback for boards that
+don't expose one. Both are heavily used by startups, including many
+YC-backed companies, and by extension are a meaningfully denser source of
+internship postings than the Tier A boards that only expose free text.
 
 ## 6. Testing strategy
 

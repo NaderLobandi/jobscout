@@ -57,5 +57,15 @@ def test_strip_html_numeric_entities():
 
 def test_guess_employment_type():
     assert guess_employment_type("Summer Intern - ML") == "internship"
+    assert guess_employment_type("Machine Learning Internship") == "internship"
+    assert guess_employment_type("Software Engineer Co-op (Fall 2026)") == "internship"
     assert guess_employment_type("Full-time role") == "full-time"
     assert guess_employment_type("whatever") == "unknown"
+
+
+def test_guess_employment_type_does_not_match_intern_as_substring():
+    # Regression: naive "intern" in text matched "International"/"Internal"/
+    # "Internet" too, mis-sorting real full-time roles as internships.
+    assert guess_employment_type("International Sales Manager") == "unknown"
+    assert guess_employment_type("Internal Tools Engineer, Full-time") == "full-time"
+    assert guess_employment_type("Internet Infrastructure Engineer") == "unknown"

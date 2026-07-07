@@ -33,6 +33,12 @@ class Job(BaseModel):
     description: str = ""
     url: str
     source: str
+    # source is the adapter that fetched the job (e.g. "jsearch"); publisher
+    # is the origin board the posting actually came from (e.g. "Glassdoor").
+    # For aggregators these differ — that's how a Glassdoor listing arriving
+    # via Google-for-Jobs stays identifiable as Glassdoor. Direct adapters
+    # leave it None (source already names the board).
+    publisher: str | None = None
     posted_at: datetime | None = None
 
 
@@ -47,6 +53,7 @@ class SearchQuery(BaseModel):
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
+_INTERNSHIP_RE = re.compile(r"\bintern(?:ship)?s?\b|\bco[-\s]?ops?\b", re.IGNORECASE)
 
 
 def strip_html(text: str) -> str:
@@ -87,10 +94,16 @@ def dedupe(jobs: list[Job]) -> list[Job]:
 
 
 def guess_employment_type(text: str) -> str:
-    """Best-effort employment-type inference from free text."""
-    t = (text or "").lower()
-    if "intern" in t:
+    """Best-effort employment-type inference from free text.
+
+    "intern" must be checked as a whole word, not a substring: naive
+    substring matching flags "International", "Internal", and "Internet"
+    roles as internships (they all start with "intern"), which then
+    silently mis-sorts real full-time postings out of the deterministic
+    employment-type filter."""
+    if _INTERNSHIP_RE.search(text or ""):
         return "internship"
+    t = (text or "").lower()
     if "part-time" in t or "part time" in t:
         return "part-time"
     if "contract" in t or "freelance" in t:

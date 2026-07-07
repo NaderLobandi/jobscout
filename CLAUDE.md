@@ -29,7 +29,15 @@ human approval gate. It never auto-submits applications.
 2. PII (name, email, phone, address) is masked before ANY LLM call and
    reinjected only at final local render.
 3. The MCP server is read-only against job APIs. No write operations.
-4. No scrapers. Only official/public JSON APIs (LinkedIn/Indeed/Glassdoor are
+4. No scrapers. Only official/public JSON APIs (Indeed/Glassdoor are
    deliberately excluded — their ToS prohibit scraping).
+   **One user-authorized exception (2026-07): LinkedIn**, via its
+   unauthenticated public guest endpoint only. The owner explicitly chose
+   this knowing it is against LinkedIn's ToS, because most postings appear
+   there first. Mitigations are mandatory and must not be weakened:
+   disabled by default; requires an explicit ToS-risk acknowledgment flag
+   in the profile; never uses login credentials or cookies; GET-only;
+   strictly capped request volume with delays between requests; backs off
+   permanently for the run on any rate-limit response.
 5. Dealbreaker/threshold filtering is deterministic Python, never LLM
    judgment, so it cannot be prompt-injected by job-posting text.

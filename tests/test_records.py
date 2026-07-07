@@ -20,6 +20,14 @@ def test_upsert_accumulates_fields(tmp_path):
     assert len(r.all()) == 1               # one record per job id
 
 
+def test_upsert_stamps_decided_at_on_decision(tmp_path):
+    r = Records(tmp_path / "rec.json")
+    r.upsert(JOB, scoring={"score": 81.5, "dimensions": {}, "summary": "good"})
+    assert "decided_at" not in r.get("r1")
+    r.upsert(JOB, decision="approved")
+    assert r.get("r1")["decided_at"]  # stamped once a decision is made
+
+
 def test_records_persist_across_sessions(tmp_path):
     path = tmp_path / "rec.json"
     Records(path).upsert(JOB, scoring={"score": 50, "dimensions": {},

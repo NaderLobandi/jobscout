@@ -33,6 +33,10 @@ from adapters.themuse import TheMuseAdapter  # noqa: E402
 from adapters.remotive import RemotiveAdapter  # noqa: E402
 from adapters.arbeitnow import ArbeitnowAdapter  # noqa: E402
 from adapters.greenhouse import GreenhouseAdapter  # noqa: E402
+from adapters.lever import LeverAdapter  # noqa: E402
+from adapters.ashby import AshbyAdapter  # noqa: E402
+from adapters.linkedin import LinkedInAdapter  # noqa: E402
+from adapters.jsearch import JSearchAdapter  # noqa: E402
 from adapters.adzuna import AdzunaAdapter  # noqa: E402
 from adapters.usajobs import USAJobsAdapter  # noqa: E402
 
@@ -60,34 +64,53 @@ def _audit(tool: str, inputs: dict) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
-def _load_source_config() -> tuple[list[str], list[str]]:
-    """Read enabled sources + greenhouse company tokens from the profile.
+def _load_source_config() -> dict:
+    """Read enabled sources + per-company board tokens from the profile.
     Falls back to all keyless sources if no profile exists yet."""
     for name in ("profile.yaml", "profile.example.yaml"):
         path = REPO_ROOT / "profile" / name
         if path.exists():
             cfg = yaml.safe_load(path.read_text()) or {}
             sources = cfg.get("sources", {})
-            return (
-                sources.get("enabled", []),
-                sources.get("greenhouse_companies", []),
-            )
-    return ["remoteok", "themuse", "remotive", "arbeitnow"], []
+            prefs = cfg.get("preferences", {})
+            return {
+                "enabled": sources.get("enabled", []),
+                "greenhouse_companies": sources.get("greenhouse_companies", []),
+                "lever_companies": sources.get("lever_companies", []),
+                "ashby_companies": sources.get("ashby_companies", []),
+                # ToS-risk gate: linkedin stays unavailable without this flag
+                "linkedin_tos_acknowledged": bool(
+                    sources.get("linkedin_tos_acknowledged", False)),
+                "employment_types": prefs.get("employment_types", []),
+            }
+    return {"enabled": ["remoteok", "themuse", "remotive", "arbeitnow"],
+            "greenhouse_companies": [], "lever_companies": [], "ashby_companies": [],
+            "linkedin_tos_acknowledged": False, "employment_types": []}
 
 
-def _build_adapters() -> list[JobSourceAdapter]:
-    enabled, gh_companies = _load_source_config()
-    registry: dict[str, JobSourceAdapter] = {
+def _build_registry(cfg: dict) -> dict[str, JobSourceAdapter]:
+    return {
         "remoteok": RemoteOKAdapter(),
         "themuse": TheMuseAdapter(),
         "remotive": RemotiveAdapter(),
         "arbeitnow": ArbeitnowAdapter(),
-        "greenhouse": GreenhouseAdapter(companies=gh_companies),
+        "greenhouse": GreenhouseAdapter(companies=cfg["greenhouse_companies"]),
+        "lever": LeverAdapter(companies=cfg["lever_companies"]),
+        "ashby": AshbyAdapter(companies=cfg["ashby_companies"]),
+        "linkedin": LinkedInAdapter(
+            employment_types=cfg["employment_types"],
+            tos_acknowledged=cfg["linkedin_tos_acknowledged"]),
+        "jsearch": JSearchAdapter(employment_types=cfg["employment_types"]),
         "adzuna": AdzunaAdapter(),
         "usajobs": USAJobsAdapter(),
     }
+
+
+def _build_adapters() -> list[JobSourceAdapter]:
+    cfg = _load_source_config()
+    registry = _build_registry(cfg)
     return [a for name, a in registry.items()
-            if name in enabled and a.available()]
+            if name in cfg["enabled"] and a.available()]
 
 
 @mcp.tool()
@@ -146,20 +169,12 @@ async def get_job_details(job_id: str) -> dict:
 async def list_sources() -> list[dict]:
     """List every registered job source and whether it is enabled/available."""
     _audit("list_sources", {})
-    enabled, gh_companies = _load_source_config()
-    registry = {
-        "remoteok": RemoteOKAdapter(),
-        "themuse": TheMuseAdapter(),
-        "remotive": RemotiveAdapter(),
-        "arbeitnow": ArbeitnowAdapter(),
-        "greenhouse": GreenhouseAdapter(companies=gh_companies),
-        "adzuna": AdzunaAdapter(),
-        "usajobs": USAJobsAdapter(),
-    }
+    cfg = _load_source_config()
+    registry = _build_registry(cfg)
     return [
         {
             "name": name,
-            "enabled": name in enabled,
+            "enabled": name in cfg["enabled"],
             "available": adapter.available(),
             "requires_key": adapter.requires_key,
         }

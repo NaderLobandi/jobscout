@@ -51,6 +51,7 @@ class Records:
             entry["keyword_coverage"] = drafts.get("keyword_coverage")
         if decision is not None:
             entry["decision"] = decision
+            entry["decided_at"] = _now()
         self._save()
 
     def get(self, job_id: str) -> dict | None:

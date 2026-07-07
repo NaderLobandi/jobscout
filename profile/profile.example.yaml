@@ -36,5 +36,11 @@ weights:
 draft_threshold: 70
 
 sources:
-  enabled: [remoteok, themuse, remotive, arbeitnow, greenhouse]
+  enabled: [remoteok, themuse, remotive, arbeitnow, greenhouse, lever, ashby]
   greenhouse_companies: [anthropic, stripe]
+  lever_companies: [palantir]
+  ashby_companies: [ramp, notion]
+  # ⚠️ LinkedIn: no official API — JobScout uses the public no-login guest
+  # endpoint, which LinkedIn's ToS prohibit automating. Off by default.
+  # To enable AT YOUR OWN RISK: add "linkedin" to enabled AND set this true.
+  linkedin_tos_acknowledged: false

@@ -1,0 +1,84 @@
+{
+  "status": "OK",
+  "request_id": "test",
+  "data": [
+    {
+      "job_id": "a1",
+      "job_title": "Machine Learning Intern",
+      "employer_name": "Acme AI",
+      "job_publisher": "Indeed",
+      "job_apply_link": "https://www.indeed.com/viewjob?jk=abc123",
+      "job_description": "<p>Work on <b>ML</b> pipelines with mentors.</p>",
+      "job_employment_type": "INTERN",
+      "job_is_remote": false,
+      "job_city": "Boston",
+      "job_state": "MA",
+      "job_country": "US",
+      "job_posted_at_timestamp": 1782000000,
+      "job_min_salary": 25,
+      "job_max_salary": 40,
+      "job_salary_period": "HOUR"
+    },
+    {
+      "job_id": "b2",
+      "job_title": "Senior Data Engineer",
+      "employer_name": "Globex",
+      "job_publisher": "Glassdoor",
+      "job_apply_link": "https://www.glassdoor.com/job-listing/xyz789",
+      "job_description": "Own the data platform.",
+      "job_employment_type": "FULLTIME",
+      "job_is_remote": true,
+      "job_city": null,
+      "job_state": null,
+      "job_country": "US",
+      "job_posted_at_timestamp": 1782000000,
+      "job_min_salary": 150000,
+      "job_max_salary": 190000,
+      "job_salary_period": "YEAR"
+    },
+    {
+      "job_id": "c3",
+      "job_title": "Role With No Apply Link",
+      "employer_name": "Nowhere Inc",
+      "job_publisher": "Indeed",
+      "job_apply_link": "",
+      "job_description": "Should be skipped.",
+      "job_employment_type": "FULLTIME",
+      "job_is_remote": false
+    },
+    {
+      "job_id": "d4",
+      "job_title": "Backend Engineer",
+      "employer_name": "Initech",
+      "job_publisher": "LinkedIn",
+      "job_apply_link": "https://www.linkedin.com/jobs/view/d4",
+      "job_description": "Build APIs.",
+      "job_employment_type": "FULLTIME",
+      "job_is_remote": false,
+      "job_city": "Austin",
+      "job_state": "TX",
+      "job_country": "US",
+      "apply_options": [
+        {"publisher": "LinkedIn", "apply_link": "https://www.linkedin.com/jobs/view/d4", "is_direct": false},
+        {"publisher": "Glassdoor", "apply_link": "https://www.glassdoor.com/apply/d4", "is_direct": true}
+      ]
+    },
+    {
+      "job_id": "e5",
+      "job_title": "QA Engineer",
+      "employer_name": "Hooli",
+      "job_publisher": "LinkedIn",
+      "job_apply_link": "https://www.linkedin.com/jobs/view/e5",
+      "job_description": "Test things.",
+      "job_employment_type": "FULLTIME",
+      "job_is_remote": false,
+      "job_city": "Denver",
+      "job_state": "CO",
+      "job_country": "US",
+      "apply_options": [
+        {"publisher": "LinkedIn", "apply_link": "https://www.linkedin.com/jobs/view/e5", "is_direct": false},
+        {"publisher": "Indeed", "apply_link": "https://www.indeed.com/viewjob?jk=e5", "is_direct": true}
+      ]
+    }
+  ]
+}

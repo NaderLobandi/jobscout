@@ -1,0 +1,41 @@
+[
+  {
+    "id": "abc123",
+    "text": "Software Engineer Intern, Summer 2027",
+    "descriptionPlain": "Build ML infrastructure alongside the platform team.",
+    "categories": {
+      "commitment": "Internship",
+      "location": "Palo Alto, CA",
+      "team": "Platform"
+    },
+    "workplaceType": "hybrid",
+    "createdAt": 1778622524938,
+    "hostedUrl": "https://jobs.lever.co/acme/abc123"
+  },
+  {
+    "id": "def456",
+    "text": "Senior Backend Engineer",
+    "descriptionPlain": "Own the payments pipeline end to end.",
+    "categories": {
+      "commitment": "Full-time",
+      "location": "Remote",
+      "team": "Payments"
+    },
+    "workplaceType": "remote",
+    "createdAt": 1778622524938,
+    "hostedUrl": "https://jobs.lever.co/acme/def456"
+  },
+  {
+    "id": "ghi789",
+    "text": "International Sales Manager",
+    "descriptionPlain": "Full-time role covering EMEA accounts.",
+    "categories": {
+      "commitment": "",
+      "location": "London, UK",
+      "team": "Sales"
+    },
+    "workplaceType": "onsite",
+    "createdAt": 1778622524938,
+    "hostedUrl": "https://jobs.lever.co/acme/ghi789"
+  }
+]

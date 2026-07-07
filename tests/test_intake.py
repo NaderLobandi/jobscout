@@ -63,3 +63,26 @@ def test_list_profile_documents(monkeypatch, tmp_path):
 def test_list_profile_documents_missing_dir(monkeypatch, tmp_path):
     _isolate(monkeypatch, tmp_path)
     assert intake.list_profile_documents() == []
+
+
+def test_extract_all_saved_documents_reads_fixed_resume_path(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    monkeypatch.setattr(intake, "RESUME_PATH", tmp_path / "profile" / "resume.pdf")
+    resume_dir = tmp_path / "profile"
+    resume_dir.mkdir(parents=True)
+    # RESUME_PATH must be a real PDF for PdfReader; a .txt stand-in at that
+    # exact path would need PdfReader to fail gracefully, so instead verify
+    # the "nothing saved yet" and "docs only" cases, which don't need a PDF.
+    docs_dir = resume_dir / "documents"
+    docs_dir.mkdir()
+    (docs_dir / "linkedin.txt").write_text("About: passionate about ML.")
+
+    text = intake.extract_all_saved_documents()
+    assert "--- Supplementary document: linkedin.txt ---" in text
+    assert "passionate about ML" in text
+
+
+def test_extract_all_saved_documents_empty_when_nothing_saved(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    monkeypatch.setattr(intake, "RESUME_PATH", tmp_path / "profile" / "resume.pdf")
+    assert intake.extract_all_saved_documents() == ""

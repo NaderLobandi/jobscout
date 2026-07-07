@@ -1,0 +1,43 @@
+{
+  "jobs": [
+    {
+      "id": "j1",
+      "title": "Software Engineer Internship, Backend",
+      "department": "Engineering",
+      "employmentType": "Intern",
+      "location": "New York, NY",
+      "isRemote": false,
+      "workplaceType": "Onsite",
+      "publishedAt": "2026-06-11T17:21:26.410+00:00",
+      "isListed": true,
+      "jobUrl": "https://jobs.ashbyhq.com/acme/j1",
+      "descriptionHtml": "<p>Ship real features on our backend team.</p>"
+    },
+    {
+      "id": "j2",
+      "title": "Staff Product Designer",
+      "department": "Design",
+      "employmentType": "FullTime",
+      "location": "Remote (US)",
+      "isRemote": true,
+      "workplaceType": "Remote",
+      "publishedAt": "2026-06-01T00:00:00.000+00:00",
+      "isListed": true,
+      "jobUrl": "https://jobs.ashbyhq.com/acme/j2",
+      "descriptionHtml": "<p>Lead design across the core product.</p>"
+    },
+    {
+      "id": "j3",
+      "title": "Unlisted Draft Role",
+      "department": "Ops",
+      "employmentType": "FullTime",
+      "location": "Remote (US)",
+      "isRemote": true,
+      "workplaceType": "Remote",
+      "publishedAt": "2026-06-01T00:00:00.000+00:00",
+      "isListed": false,
+      "jobUrl": "https://jobs.ashbyhq.com/acme/j3",
+      "descriptionHtml": "<p>Should never appear — not yet listed.</p>"
+    }
+  ]
+}
