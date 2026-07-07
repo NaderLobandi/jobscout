@@ -170,6 +170,14 @@ def hitl_gate(package: dict) -> str:
         body = package["review_notes"] + (f"\n\n{issues}" if issues else "")
         console.print(Panel(body, title="🔍 Reviewer notes (second-pass critique)",
                             border_style="magenta"))
+    kw = package.get("keyword_coverage")
+    if kw and (kw["covered"] or kw["missing"]):
+        total = len(kw["covered"]) + len(kw["missing"])
+        body = (f"[green]✅ Covered ({len(kw['covered'])}/{total}):[/green] "
+               f"{', '.join(kw['covered']) or '—'}\n"
+               f"[yellow]⚠️  Missing:[/yellow] {', '.join(kw['missing']) or '—'}")
+        console.print(Panel(body, title="🔑 Keyword coverage vs. the posting",
+                            border_style="cyan"))
 
     console.print(
         "[yellow]JobScout never submits applications. "

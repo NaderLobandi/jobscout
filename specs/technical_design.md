@@ -53,8 +53,14 @@ Five components per the course framework: **model** (Claude API),
    critiques the masked cover letter for unsupported claims, missed
    keywords, generic phrasing, and tone mismatch, and returns a revised
    letter + a one-sentence summary. Runs on masked text, before unmask.
-6. HITL gate: present package (including reviewer notes), hard stop, user
-   applies manually
+5c. Keyword coverage: `src/keyword_coverage.py` deterministically extracts
+   the posting's key terms (title words + frequent non-stopword terms,
+   filtered against a small job-posting-filler list) and checks which
+   appear in the final cover letter — no LLM call, a second, independent
+   check on the same claim the drafting/review skills already instruct
+   for ("use the posting's terminology, don't stuff keywords").
+6. HITL gate: present package (including reviewer notes and keyword
+   coverage), hard stop, user applies manually
 7. Memory: record seen/approved job IDs; reruns skip duplicates
 8. Insights (on demand, UI History page only): `src/insights.py` computes
    average score per dimension across every Records entry ever scored —

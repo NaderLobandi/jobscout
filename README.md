@@ -109,8 +109,10 @@ guardrails, and agents):
 - **🚀 Run JobScout** — one click runs search → deterministic filter →
   resume analysis → per-job scoring with live progress. Each match expands
   into a score-dimension breakdown, a drafted cover letter that's already
-  been through a second-pass reviewer critique + resume tweaks, and
-  **Approve / Reject / Skip** buttons — the HITL gate as a UI.
+  been through a second-pass reviewer critique + resume tweaks, a
+  deterministic **keyword-coverage check** against the posting (no LLM
+  call — which of the posting's own key terms actually made it into the
+  letter), and **Approve / Reject / Skip** buttons — the HITL gate as a UI.
 - **📚 History** — every job ever scored, with scores, decisions, links,
   and saved cover letters (`.jobscout_records.json`, gitignored), plus a
   JSON export. Opens with a **recurring-gaps** view: which scoring

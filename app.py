@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 from src.agents import MODEL, drafting_agent, insights_agent, scoring_agent
 from src.guardrails import PIIMasker
 from src.insights import aggregate_dimension_gaps
+from src.keyword_coverage import keyword_coverage
 from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, extract_profile_text,
                         list_profile_documents, load_profile)
 from src.memory import Memory
@@ -260,6 +261,7 @@ def _draft_for(package: dict, masker: PIIMasker, skills_profile: str,
         drafts["cover_letter"] = masker.unmask(review["revised_cover_letter"])
         drafts["review_notes"] = review["revision_summary"]
         drafts["review_issues"] = review["issues_found"]
+        drafts["keyword_coverage"] = keyword_coverage(job, drafts["cover_letter"])
     records.upsert(job, drafts=drafts)
     st.rerun()
 
@@ -312,6 +314,13 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
                     for issue in record.get("review_issues") or []:
                         st.markdown(f"- **{issue['category'].replace('_', ' ')}** "
                                     f"— {issue['detail']}")
+            kw = record.get("keyword_coverage")
+            if kw and (kw["covered"] or kw["missing"]):
+                total = len(kw["covered"]) + len(kw["missing"])
+                st.caption(f"🔑 Keyword coverage: {len(kw['covered'])}/{total}")
+                c1, c2 = st.columns(2)
+                c1.markdown("✅ " + (", ".join(kw["covered"]) or "—"))
+                c2.markdown("⚠️ " + (", ".join(kw["missing"]) or "—"))
         else:
             hint = ("" if package["score"] >= threshold else
                     " (below your draft threshold — drafting is optional)")
@@ -522,6 +531,13 @@ def page_history() -> None:
                 if e.get("review_notes"):
                     st.markdown("**🔍 Reviewer notes**")
                     st.caption(e["review_notes"])
+                kw = e.get("keyword_coverage")
+                if kw and (kw["covered"] or kw["missing"]):
+                    total = len(kw["covered"]) + len(kw["missing"])
+                    st.markdown(f"**🔑 Keyword coverage: "
+                               f"{len(kw['covered'])}/{total}**")
+                    st.caption(f"✅ {', '.join(kw['covered']) or '—'}")
+                    st.caption(f"⚠️ {', '.join(kw['missing']) or '—'}")
 
     st.download_button(
         "⬇️ Export all records (JSON)",

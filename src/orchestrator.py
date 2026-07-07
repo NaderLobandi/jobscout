@@ -33,6 +33,7 @@ from .agents import scoring_agent, drafting_agent, search_agent
 from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
                          violates_dealbreakers)
 from .intake import extract_profile_text, load_profile, run_wizard
+from .keyword_coverage import keyword_coverage
 from .memory import Memory
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -183,6 +184,7 @@ async def run(max_score: int, dry_run: bool) -> None:
                 package["resume_tweaks"] = drafts["resume_tweaks"]
                 package["review_notes"] = review["revision_summary"]
                 package["review_issues"] = review["issues_found"]
+                package["keyword_coverage"] = keyword_coverage(job, package["cover_letter"])
             except Exception as exc:
                 console.print(f"[red]drafting failed: {exc}[/red]")
 

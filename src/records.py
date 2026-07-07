@@ -48,6 +48,7 @@ class Records:
             entry["resume_tweaks"] = drafts.get("resume_tweaks")
             entry["review_notes"] = drafts.get("review_notes")
             entry["review_issues"] = drafts.get("review_issues")
+            entry["keyword_coverage"] = drafts.get("keyword_coverage")
         if decision is not None:
             entry["decision"] = decision
         self._save()
