@@ -7,6 +7,7 @@ candidate:
   summary: >
     ML engineer with 3 years building production recommendation systems
     in Python/PyTorch. Looking to move into applied LLM work.
+  communication_style: ""                # "" (default), direct, collaborative, enthusiastic
 
 preferences:
   employment_types: [full-time]          # internship, full-time, part-time, contract

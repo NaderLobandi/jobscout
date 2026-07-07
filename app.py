@@ -96,6 +96,13 @@ def page_profile() -> None:
         phone = c3.text_input("Phone", cand.get("phone", ""))
         summary = st.text_area("One-line summary of yourself (optional)",
                                cand.get("summary", ""), height=68)
+        style_options = ["", "direct", "collaborative", "enthusiastic"]
+        communication_style = st.selectbox(
+            "Cover letter tone (optional)", style_options,
+            index=style_options.index(cand.get("communication_style", ""))
+            if cand.get("communication_style", "") in style_options else 0,
+            help="Calibrates the drafting agent's tone. Blank = natural, "
+                 "confident default.")
 
         resume_file = st.file_uploader("Resume (PDF)", type=["pdf"])
         current_resume = REPO_ROOT / "profile" / "resume.pdf"
@@ -191,6 +198,7 @@ def page_profile() -> None:
             "candidate": {
                 "name": name, "email": email, "phone": phone,
                 "resume_path": "./profile/resume.pdf", "summary": summary,
+                "communication_style": communication_style,
             },
             "preferences": {
                 "employment_types": employment_types or ["full-time"],
@@ -236,14 +244,17 @@ def page_profile() -> None:
 # Page 2 — Run
 # ---------------------------------------------------------------------------
 
-def _draft_for(package: dict, masker: PIIMasker, skills_profile: str) -> None:
+def _draft_for(package: dict, masker: PIIMasker, skills_profile: str,
+               communication_style: str = "") -> None:
     job = package["job"]
     client = st.session_state["client"]
     with st.spinner(f"Drafting application package for {job['title']}…"):
-        drafts = drafting_agent.draft_package(client, skills_profile, job, package)
+        drafts = drafting_agent.draft_package(client, skills_profile, job,
+                                              package, communication_style)
     with st.spinner("Second pass: reviewing the draft for a fresh critique…"):
         review = drafting_agent.review_draft(
-            client, skills_profile, job, drafts["cover_letter"])
+            client, skills_profile, job, drafts["cover_letter"],
+            communication_style)
         # SECURITY: unmask ONLY here — final local render for human eyes;
         # the unmasked text never goes back through the model.
         drafts["cover_letter"] = masker.unmask(review["revised_cover_letter"])
@@ -260,7 +271,7 @@ def _decide(job: dict, decision: str) -> None:
 
 
 def render_package(package: dict, threshold: int, masker: PIIMasker,
-                   skills_profile: str) -> None:
+                   skills_profile: str, communication_style: str = "") -> None:
     job = package["job"]
     record = records.get(job["id"]) or {}
     decision = record.get("decision")
@@ -306,7 +317,7 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
                     " (below your draft threshold — drafting is optional)")
             if st.button(f"✍️ Draft cover letter + resume tweaks{hint}",
                          key=f"draft_{job['id']}"):
-                _draft_for(package, masker, skills_profile)
+                _draft_for(package, masker, skills_profile, communication_style)
 
         # HITL gate — the human decides; JobScout never submits.
         st.info("🔒 JobScout never submits applications. If you approve, "
@@ -423,9 +434,11 @@ def page_run() -> None:
     if "client" not in st.session_state:
         from anthropic import Anthropic
         st.session_state["client"] = Anthropic()
+    communication_style = profile.get("candidate", {}).get("communication_style", "")
     for package in scored:
         render_package(package, threshold, masker,
-                       st.session_state.get("skills_profile", ""))
+                       st.session_state.get("skills_profile", ""),
+                       communication_style)
 
 
 # ---------------------------------------------------------------------------

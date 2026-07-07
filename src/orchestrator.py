@@ -172,10 +172,11 @@ async def run(max_score: int, dry_run: bool) -> None:
             console.print(f"[bold cyan]✍️  Drafting package for "
                           f"{job['title']} @ {job['company']}…[/bold cyan]")
             try:
+                style = candidate.get("communication_style", "")
                 drafts = drafting_agent.draft_package(client, skills_profile,
-                                                      job, package)
+                                                      job, package, style)
                 review = drafting_agent.review_draft(
-                    client, skills_profile, job, drafts["cover_letter"])
+                    client, skills_profile, job, drafts["cover_letter"], style)
                 # SECURITY: unmask ONLY here — final local render for human
                 # eyes; the unmasked text never goes back through the model.
                 package["cover_letter"] = masker.unmask(review["revised_cover_letter"])

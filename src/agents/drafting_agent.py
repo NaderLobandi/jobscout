@@ -26,6 +26,16 @@ from anthropic import Anthropic
 from . import MODEL, load_skill, thinking_kwargs
 from ..guardrails import audit
 
+def _style_line(communication_style: str) -> str:
+    """Formats the optional communication-style hint for the drafting and
+    review prompts. Empty string (no line at all) when unset, so an
+    unset style changes nothing about the prompt an existing profile
+    would have produced before this feature existed."""
+    if not communication_style:
+        return ""
+    return f"\nCommunication style: {communication_style}\n"
+
+
 DRAFT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -41,7 +51,7 @@ DRAFT_SCHEMA = {
 
 
 def draft_package(client: Anthropic, skills_profile: str, job: dict,
-                  scoring: dict) -> dict:
+                  scoring: dict, communication_style: str = "") -> dict:
     audit("llm.draft_package", {"job_id": job["id"], "title": job["title"]})
     response = client.messages.create(
         model=MODEL,
@@ -51,7 +61,8 @@ def draft_package(client: Anthropic, skills_profile: str, job: dict,
         messages=[{
             "role": "user",
             "content": (
-                f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n\n"
+                f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n"
+                f"{_style_line(communication_style)}\n"
                 f"WHY THIS JOB SCORED {scoring['score']}/100:\n{scoring['summary']}\n\n"
                 "<job_posting>\n"
                 f"Title: {job['title']}\nCompany: {job['company']}\n"
@@ -98,7 +109,7 @@ REVIEW_SCHEMA = {
 
 
 def review_draft(client: Anthropic, skills_profile: str, job: dict,
-                 cover_letter: str) -> dict:
+                 cover_letter: str, communication_style: str = "") -> dict:
     """Fresh-context critique of an already-drafted cover letter. Call
     this AFTER draft_package() and BEFORE unmasking — it operates on the
     same masked text draft_package produced and must never see real PII.
@@ -114,7 +125,8 @@ def review_draft(client: Anthropic, skills_profile: str, job: dict,
         messages=[{
             "role": "user",
             "content": (
-                f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n\n"
+                f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n"
+                f"{_style_line(communication_style)}\n"
                 "<job_posting>\n"
                 f"Title: {job['title']}\nCompany: {job['company']}\n"
                 f"Description: {job['description']}\n"

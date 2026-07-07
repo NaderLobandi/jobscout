@@ -108,6 +108,9 @@ def run_wizard() -> dict:
     phone = Prompt.ask("Phone", default="")
     resume_path = Prompt.ask("Path to resume PDF", default="./profile/resume.pdf")
     summary = Prompt.ask("One-line summary of yourself (optional)", default="")
+    communication_style = Prompt.ask(
+        "Cover letter tone (optional — blank for a natural default)",
+        choices=["", "direct", "collaborative", "enthusiastic"], default="")
 
     employment_types = _ask_list(
         "Employment types (comma-sep: internship, full-time, part-time, contract)",
@@ -130,6 +133,7 @@ def run_wizard() -> dict:
         "candidate": {
             "name": name, "email": email, "phone": phone,
             "resume_path": resume_path, "summary": summary,
+            "communication_style": communication_style,
         },
         "preferences": {
             "employment_types": employment_types,
