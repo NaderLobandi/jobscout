@@ -5,8 +5,10 @@ Spec: specs/scenarios.feature — "PII never reaches the model",
 "Internship-only profile filters out full-time roles".
 """
 
+from datetime import datetime, timedelta, timezone
+
 from src.guardrails import (PIIMasker, employment_type_allowed,
-                            violates_dealbreakers)
+                            posting_is_recent, violates_dealbreakers)
 
 RESUME = (
     "Jordan Rivera\njordan.rivera@example.com | 555-123-4567\n"
@@ -52,3 +54,24 @@ def test_employment_type_filter():
     assert employment_type_allowed("full-time", ["internship"]) is False
     assert employment_type_allowed("internship", ["internship"]) is True
     assert employment_type_allowed("unknown", ["internship"]) is True  # score, don't drop
+
+
+def test_posting_is_recent_filter_disabled_by_default():
+    assert posting_is_recent(None, None) is True
+    assert posting_is_recent(None, 0) is True  # 0 == disabled, same as None
+
+
+def test_posting_is_recent_within_window():
+    fresh = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    stale = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    assert posting_is_recent(fresh, 7) is True
+    assert posting_is_recent(stale, 7) is False
+
+
+def test_posting_is_recent_undated_does_not_pass_when_enabled():
+    # Unlike employment_type_allowed's "unknown passes" — an unstated date
+    # isn't a reliable "recent enough," so it must NOT pass once a max age
+    # is actually set.
+    assert posting_is_recent(None, 7) is False
+    assert posting_is_recent("", 7) is False
+    assert posting_is_recent("not-a-date", 7) is False

@@ -45,9 +45,18 @@ Five components per the course framework: **model** (Claude API),
 
 1. Intake: if `profile/profile.yaml` missing/incomplete → run wizard
 2. Search: Search Agent builds `SearchQuery` from profile → MCP `search_jobs`
-3. Filter: deterministic dealbreaker + employment-type filters BEFORE scoring
+3. Filter: deterministic dealbreaker + employment-type + salary-floor +
+   posting-age filters BEFORE scoring. `guardrails.posting_is_recent()`
+   drops anything older than `preferences.max_posting_age_days` — and,
+   unlike the other filters, an UNDATED posting does NOT pass when this
+   is set, since the point is a freshness guarantee.
 4. Score: Scoring Agent per job (masked resume + prefs) → weighted score,
-   per-dimension breakdown, rationale (structured output, JSON schema)
+   per-dimension breakdown, rationale (structured output, JSON schema).
+   `--min-matches N` (CLI) turns the fixed-batch scoring pass into a
+   goal-seeking loop: keep scoring jobs, in relevance order, up to the
+   `--max-score` ceiling, until N score ≥ `draft_threshold` or the pool
+   (or ceiling) is exhausted — printing a clear warning if the goal isn't
+   met rather than silently returning fewer matches than asked for.
 5. Draft: for jobs ≥ threshold → Drafting Agent → cover letter + resume tweaks
 5b. Review: a second, fresh-context call (Drafting Agent's `review_draft`)
    critiques the masked cover letter for unsupported claims, missed
@@ -60,7 +69,14 @@ Five components per the course framework: **model** (Claude API),
    check on the same claim the drafting/review skills already instruct
    for ("use the posting's terminology, don't stuff keywords").
 6. HITL gate: present package (including reviewer notes and keyword
-   coverage), hard stop, user applies manually
+   coverage), hard stop, user applies manually.
+   `--auto` (CLI): for unattended/scheduled runs, where nobody is at a
+   terminal to answer the interactive prompt. The gate itself is NOT
+   skipped or weakened — it's deferred: drafted packages are written to
+   `.jobscout_records.json` with no decision, the same store and the
+   same "undecided" state the Streamlit UI already uses before a human
+   clicks Approve/Reject/Skip. There remains no code path anywhere that
+   sets a decision other than an explicit human action.
 7. Memory: record seen/approved job IDs; reruns skip duplicates
 8. Insights (on demand, UI History page only): `src/insights.py` computes
    average score per dimension across every Records entry ever scored —

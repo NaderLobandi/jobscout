@@ -31,10 +31,11 @@ from rich.table import Table
 
 from .agents import scoring_agent, drafting_agent, search_agent
 from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
-                         violates_dealbreakers)
+                         posting_is_recent, violates_dealbreakers)
 from .intake import extract_profile_text, load_profile, run_wizard
 from .keyword_coverage import keyword_coverage
 from .memory import Memory
+from .records import Records
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 console = Console()
@@ -62,14 +63,16 @@ def _relevance_rank(job: dict, target_roles: list[str]) -> int:
 def deterministic_filter(jobs: list[dict], profile: dict, memory: Memory) -> list[dict]:
     """SECURITY (deterministic guardrail): hard filters run BEFORE any LLM
     call — cheaper, and immune to prompt injection from job-posting text.
-    Order: already-seen → employment type → dealbreakers → salary floor."""
+    Order: already-seen → employment type → dealbreakers → salary floor →
+    posting age."""
     prefs = profile.get("preferences", {})
     dealbreakers = prefs.get("dealbreakers", [])
     allowed_types = prefs.get("employment_types", [])
     salary_floor = prefs.get("salary_floor_usd", 0) or 0
+    max_age_days = prefs.get("max_posting_age_days") or None
 
     kept: list[dict] = []
-    dropped = {"seen": 0, "type": 0, "dealbreaker": 0, "salary": 0}
+    dropped = {"seen": 0, "type": 0, "dealbreaker": 0, "salary": 0, "stale": 0}
     for job in jobs:
         if memory.is_seen(job["id"]):
             dropped["seen"] += 1
@@ -84,18 +87,23 @@ def deterministic_filter(jobs: list[dict], profile: dict, memory: Memory) -> lis
         if salary_floor and job.get("salary_max") and job["salary_max"] < salary_floor:
             dropped["salary"] += 1
             continue
+        if not posting_is_recent(job.get("posted_at"), max_age_days):
+            dropped["stale"] += 1
+            continue
         kept.append(job)
 
     audit("deterministic_filter", {"in": len(jobs), "kept": len(kept), **dropped})
     console.print(
         f"[dim]Filter: {len(jobs)} in → {len(kept)} kept "
         f"(seen {dropped['seen']}, type {dropped['type']}, "
-        f"dealbreaker {dropped['dealbreaker']}, salary {dropped['salary']})[/dim]"
+        f"dealbreaker {dropped['dealbreaker']}, salary {dropped['salary']}, "
+        f"stale {dropped['stale']})[/dim]"
     )
     return kept
 
 
-async def run(max_score: int, dry_run: bool) -> None:
+async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
+              auto: bool = False) -> None:
     load_dotenv(REPO_ROOT / ".env")
 
     # ---- 1. Intake ------------------------------------------------------
@@ -112,6 +120,7 @@ async def run(max_score: int, dry_run: bool) -> None:
         address=candidate.get("address", ""),
     )
     memory = Memory()
+    records = Records() if auto else None
 
     # ---- 2. Search via MCP ----------------------------------------------
     console.print("[bold cyan]🔎 Searching job boards via MCP…[/bold cyan]")
@@ -150,9 +159,14 @@ async def run(max_score: int, dry_run: bool) -> None:
     # to the jobs most likely to matter, not whatever order dedupe produced.
     jobs.sort(key=lambda j: _relevance_rank(j, prefs.get("target_roles", [])),
              reverse=True)
+    threshold = profile.get("draft_threshold", 70)
     to_score = jobs[:max_score]
-    console.print(f"[bold cyan]⚖️  Scoring {len(to_score)} jobs…[/bold cyan]")
+    goal = (f", stopping early once {min_matches} score ≥ {threshold:.0f}"
+            if min_matches else "")
+    console.print(f"[bold cyan]⚖️  Scoring up to {len(to_score)} jobs{goal}…"
+                  "[/bold cyan]")
     scored: list[dict] = []
+    matches = 0
     for job in to_score:
         try:
             result = scoring_agent.score_job(client, skills_profile, prefs,
@@ -162,9 +176,28 @@ async def run(max_score: int, dry_run: bool) -> None:
             continue
         scored.append({"job": job, **result})
         console.print(f"  {result['score']:5.1f}  {job['title'][:55]} @ {job['company']}")
+        if records is not None:
+            # --auto: every scored job lands in the same store the UI
+            # reads, so an unattended run has something for the human to
+            # review later — mirrors app.py's page_run() exactly.
+            records.upsert(job, scoring=result)
+            memory.mark_seen(job["id"], job["title"], "scored")
+        if result["score"] >= threshold:
+            matches += 1
+            if min_matches and matches >= min_matches:
+                console.print(f"[green]Reached the goal: {matches} jobs "
+                              f"≥ {threshold:.0f} after scoring "
+                              f"{len(scored)}.[/green]")
+                break
+    if min_matches and matches < min_matches:
+        console.print(
+            f"[yellow]Only {matches}/{min_matches} matches ≥ {threshold:.0f} "
+            f"after scoring all {len(scored)} available jobs (capped by "
+            f"--max-score {max_score}). Raise --max-score, broaden target "
+            f"roles/locations, or loosen max_posting_age_days to find "
+            f"more.[/yellow]")
 
     scored.sort(key=lambda s: s["score"], reverse=True)
-    threshold = profile.get("draft_threshold", 70)
 
     # ---- 5 + 6. Draft for strong matches, then HITL gate -------------------
     for package in scored:
@@ -188,6 +221,17 @@ async def run(max_score: int, dry_run: bool) -> None:
             except Exception as exc:
                 console.print(f"[red]drafting failed: {exc}[/red]")
 
+            if auto:
+                # No interactive prompt in an unattended run — HITL still
+                # applies, it's just deferred: save the drafted package
+                # with NO decision, exactly like the Streamlit UI would
+                # before you click Approve/Reject/Skip. JobScout still has
+                # no code path that submits anything.
+                records.upsert(job, drafts=package)
+                console.print(f"[green]✓ saved for review: {job['title']} "
+                              f"@ {job['company']} ({package['score']:.0f}) "
+                              f"— {job['url']}[/green]")
+                continue
             # HARD STOP — the human decides; JobScout never submits.
             decision = hitl_gate(package)
             if decision == "quit":
@@ -199,16 +243,26 @@ async def run(max_score: int, dry_run: bool) -> None:
             decision = "below_threshold"
             console.print(f"[dim]{package['score']:5.1f} (below {threshold}) "
                           f"{job['title'][:55]} — no draft[/dim]")
+            if auto:
+                continue
 
         # ---- 7. Memory update ------------------------------------------
         memory.mark_seen(job["id"], job["title"],
                          "approved" if decision == "approved" else decision)
 
-    console.print(
-        f"\n[green]Done. {memory.seen_count} jobs remembered, "
-        f"{memory.approved_count} approved so far. "
-        f"Audit trail: logs/audit.jsonl[/green]"
-    )
+    if auto:
+        console.print(
+            f"\n[green]Done. {matches} match(es) ≥ {threshold:.0f} saved to "
+            f".jobscout_records.json for review in the Streamlit UI. "
+            f"Nothing was approved or submitted — that decision is still "
+            f"yours. Audit trail: logs/audit.jsonl[/green]"
+        )
+    else:
+        console.print(
+            f"\n[green]Done. {memory.seen_count} jobs remembered, "
+            f"{memory.approved_count} approved so far. "
+            f"Audit trail: logs/audit.jsonl[/green]"
+        )
 
 
 def _print_table(jobs: list[dict]) -> None:
@@ -225,11 +279,22 @@ def _print_table(jobs: list[dict]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="JobScout — AI job matching agent")
     parser.add_argument("--max-score", type=int, default=6,
-                        help="max jobs to score with the LLM per run (cost cap)")
+                        help="max jobs to score with the LLM per run (cost "
+                             "cap; also the hard ceiling for --min-matches)")
     parser.add_argument("--dry-run", action="store_true",
                         help="search + filter only; no LLM calls")
+    parser.add_argument("--min-matches", type=int, default=None,
+                        help="keep scoring more jobs (up to --max-score) "
+                             "until this many score >= draft_threshold, "
+                             "instead of stopping after a fixed batch")
+    parser.add_argument("--auto", action="store_true",
+                        help="unattended mode: no interactive HITL prompt. "
+                             "Drafted packages are saved to "
+                             ".jobscout_records.json with NO decision — "
+                             "review and Approve/Reject/Skip later in the "
+                             "Streamlit UI. Nothing is ever auto-approved.")
     args = parser.parse_args()
-    asyncio.run(run(args.max_score, args.dry_run))
+    asyncio.run(run(args.max_score, args.dry_run, args.min_matches, args.auto))
 
 
 if __name__ == "__main__":

@@ -161,6 +161,13 @@ def page_profile() -> None:
         salary_floor = c2.number_input("Salary floor USD (0 = ignore)",
                                        min_value=0, step=5000,
                                        value=int(prefs.get("salary_floor_usd", 0)))
+        max_posting_age = st.number_input(
+            "Only show postings from the last N days (0 = ignore)",
+            min_value=0, step=1,
+            value=int(prefs.get("max_posting_age_days") or 0),
+            help="Deterministic filter, applied before any LLM call. "
+                 "Postings with no stated date are dropped when this is "
+                 "set — an unstated date isn't a reliable 'recent enough.'")
         c1, c2 = st.columns(2)
         must_haves = c1.text_input("Must-haves (comma-separated, optional)",
                                    ", ".join(prefs.get("must_haves", [])))
@@ -244,6 +251,7 @@ def page_profile() -> None:
                 "locations": _csv(locations),
                 "remote_preference": remote_pref,
                 "salary_floor_usd": int(salary_floor),
+                "max_posting_age_days": int(max_posting_age) or None,
                 "visa_sponsorship_required": bool(
                     prefs.get("visa_sponsorship_required", False)),
                 "must_haves": _csv(must_haves),
@@ -419,9 +427,14 @@ def page_run() -> None:
                f"across **{', '.join(profile.get('sources', {}).get('enabled', []))}** "
                f"· draft threshold **{threshold}**")
 
-    c1, c2, _ = st.columns([1, 1, 2])
-    max_score = c1.number_input("Max jobs to score (cost cap)", 1, 15, 6)
-    run = c2.button("🔎 Search & score", type="primary", width="stretch")
+    c1, c2, c3 = st.columns([1, 1, 1])
+    max_score = c1.number_input("Max jobs to score (cost cap)", 1, 40, 6)
+    min_matches = c2.number_input(
+        f"Stop early once this many ≥ {threshold} found (0 = off)",
+        0, 20, 0,
+        help="Keeps scoring more jobs, up to the cost cap above, instead "
+             "of stopping after a fixed batch.")
+    run = c3.button("🔎 Search & score", type="primary", width="stretch")
 
     if run:
         cand = profile.get("candidate", {})
@@ -460,9 +473,11 @@ def page_run() -> None:
                 st.session_state["skills_profile"] = scoring_agent.analyze_resume(
                     st.session_state["client"], resume_text, summary)
 
-            st.write(f"⚖️ Scoring {len(to_score)} jobs…")
+            goal = f", stopping early at {int(min_matches)} matches" if min_matches else ""
+            st.write(f"⚖️ Scoring up to {len(to_score)} jobs{goal}…")
             bar = st.progress(0.0)
             scored = []
+            hits = 0
             for i, job in enumerate(to_score):
                 try:
                     result = scoring_agent.score_job(
@@ -478,6 +493,19 @@ def page_run() -> None:
                 memory.mark_seen(job["id"], job["title"], "scored")
                 bar.progress((i + 1) / len(to_score),
                              text=f"{result['score']:.0f} — {job['title']}")
+                if result["score"] >= threshold:
+                    hits += 1
+                    if min_matches and hits >= int(min_matches):
+                        st.write(f"✅ Reached the goal: {hits} matches "
+                                f"≥ {threshold} after scoring {len(scored)}.")
+                        break
+            if min_matches and hits < int(min_matches):
+                st.warning(
+                    f"Only {hits}/{int(min_matches)} matches ≥ {threshold} "
+                    f"after scoring all {len(scored)} available jobs (capped "
+                    "by the cost cap above). Raise the cost cap, broaden "
+                    "target roles/locations, or loosen the posting-age "
+                    "limit on the Profile page to find more.")
 
             scored.sort(key=lambda p: p["score"], reverse=True)
             st.session_state["scored"] = scored

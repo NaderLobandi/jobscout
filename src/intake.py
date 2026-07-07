@@ -133,6 +133,8 @@ def run_wizard() -> dict:
                                       "remote_or_hybrid", "any"],
                              default="remote_or_hybrid")
     salary_floor = int(Prompt.ask("Salary floor USD (0 = ignore)", default="0"))
+    max_posting_age = int(Prompt.ask(
+        "Only show postings from the last N days (0 = ignore)", default="0"))
     visa = Confirm.ask("Do you require visa sponsorship?", default=False)
     must_haves = _ask_list("Must-haves (comma-separated, optional)", "")
     dealbreakers = _ask_list("Dealbreakers (comma-separated, optional)", "")
@@ -160,6 +162,7 @@ def run_wizard() -> dict:
             "locations": locations,
             "remote_preference": remote_pref,
             "salary_floor_usd": salary_floor,
+            "max_posting_age_days": max_posting_age or None,
             "visa_sponsorship_required": visa,
             "must_haves": must_haves,
             "dealbreakers": dealbreakers,

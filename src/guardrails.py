@@ -131,6 +131,25 @@ def employment_type_allowed(job_type: str, allowed: list[str]) -> bool:
     return job_type in allowed
 
 
+def posting_is_recent(posted_at: str | None, max_age_days: int | None) -> bool:
+    """Deterministic freshness check: no LLM judgment on "how old is this
+    posting," just a date comparison. Unlike employment_type_allowed(),
+    an UNDATED posting does NOT pass when a max age is set — the whole
+    point of this filter is a freshness guarantee, and letting undated
+    jobs slip through would quietly undermine that guarantee for exactly
+    the postings most likely to be stale (no date = the board didn't say)."""
+    if not max_age_days:
+        return True  # filter disabled
+    if not posted_at:
+        return False
+    try:
+        posted = datetime.fromisoformat(str(posted_at).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    now = datetime.now(posted.tzinfo) if posted.tzinfo else datetime.now()
+    return (now - posted).days <= max_age_days
+
+
 # ---------------------------------------------------------------------------
 # HITL gate
 # ---------------------------------------------------------------------------

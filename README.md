@@ -137,17 +137,50 @@ python -m src.orchestrator --dry-run
 
 # Cap LLM scoring calls per run (default 6):
 python -m src.orchestrator --max-score 10
+
+# Keep scoring (up to --max-score) until 5 jobs score >= draft_threshold,
+# instead of stopping after a fixed batch:
+python -m src.orchestrator --min-matches 5 --max-score 40
+
+# Unattended (e.g. a daily cron job): no interactive prompt. Drafted
+# packages are saved to .jobscout_records.json with NO decision — review
+# and Approve/Reject/Skip later in the Streamlit UI, same as any other
+# run. Nothing is ever auto-approved; this only defers the human gate,
+# it does not remove it.
+python -m src.orchestrator --auto --min-matches 5 --max-score 40
 ```
 
 A full run: searches all enabled boards concurrently via MCP → drops
-already-seen jobs, wrong employment types, dealbreakers, and salary-floor
-misses **in code, before any LLM call** → analyzes your masked resume once →
-scores each job per dimension with rationale → drafts a cover letter +
-resume tweaks for jobs above your threshold → a second, fresh-context
-reviewer agent critiques the draft (unsupported claims, missed keywords,
-generic phrasing, tone) and returns a revised letter → presents each
-package, including the reviewer's notes, at the approval gate. You
-review, then apply yourself at the job URL.
+already-seen jobs, wrong employment types, dealbreakers, salary-floor
+misses, and (if `preferences.max_posting_age_days` is set) postings older
+than that many days **in code, before any LLM call** → analyzes your
+masked resume once → scores each job per dimension with rationale →
+drafts a cover letter + resume tweaks for jobs above your threshold → a
+second, fresh-context reviewer agent critiques the draft (unsupported
+claims, missed keywords, generic phrasing, tone) and returns a revised
+letter → presents each package, including the reviewer's notes, at the
+approval gate. You review, then apply yourself at the job URL.
+
+**Only-recent-postings filter.** Set `preferences.max_posting_age_days`
+(Profile page, or directly in `profile.yaml`) to drop anything older than
+N days — deterministic, before any LLM call, same category as the
+dealbreaker/employment-type/salary filters. A posting with no stated date
+is dropped too when this is set, on purpose: an unstated date isn't a
+reliable "recent enough."
+
+**Running it daily.** JobScout has no built-in scheduler — `--auto` makes
+a run safe to schedule, but starting the schedule itself is a decision
+about your machine, not the repo, so it's opt-in via your OS's own tools,
+e.g. cron:
+
+```cron
+# ~/.crontab — daily at 8am, from the repo root
+0 8 * * * cd /path/to/jobscout && .venv/bin/python -m src.orchestrator --auto --min-matches 5 --max-score 40 >> logs/cron.log 2>&1
+```
+
+or a macOS `launchd` plist calling the same command. Either way, open the
+Streamlit **History** page whenever you like to review what it found —
+the run itself never approves or submits anything.
 
 ### Testing & evals
 

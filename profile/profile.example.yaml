@@ -19,6 +19,7 @@ preferences:
   locations: [Denver, Remote US]
   remote_preference: remote_or_hybrid    # onsite, hybrid, remote_only, any
   salary_floor_usd: 0                    # 0 = ignore salary
+  max_posting_age_days: 7                # null/0 = ignore; undated postings dropped when set
   visa_sponsorship_required: false
   must_haves: []
   dealbreakers: []                       # e.g. ["on-call rotation"]
