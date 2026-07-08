@@ -1,5 +1,7 @@
 # JobScout 🔭 — a personal job-search concierge agent
 
+![JobScout banner](./docs/banner.gif)
+
 **Kaggle "AI Agents: Intensive Vibe Coding Capstone" — Concierge Agents track.**
 
 ## The problem

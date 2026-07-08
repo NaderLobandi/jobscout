@@ -570,6 +570,81 @@ def render_skill_gaps(entries: list[dict]) -> None:
         st.info(suggestion)
 
 
+DECISION_CATEGORIES = [
+    ("undecided", "🕓 Undecided"), ("approved", "✅ Approved"),
+    ("rejected", "❌ Rejected"), ("skipped", "⏭ Skipped"),
+]
+
+
+def _history_decide(job: dict, decision: str) -> None:
+    records.upsert(job, decision=decision)
+    memory.mark_seen(job["id"], job["title"], decision)
+    st.rerun()
+
+
+def render_history_entry(e: dict) -> None:
+    """One record's full detail — score breakdown, draft, and Approve /
+    Reject / Skip. Same decide buttons as the Run page, so a job you left
+    undecided there isn't stranded once its buttons scroll out of that
+    session — you can always come back and decide from here."""
+    job = e["job"]
+    score = e.get("score")
+    decision = e.get("decision") or "undecided"
+    badge = {"approved": "✅ approved", "rejected": "❌ rejected",
+             "skipped": "⏭ skipped"}.get(decision, "🕓 undecided")
+    score_label = f"{score:.0f}/100" if score is not None else "—"
+    with st.expander(f"{score_label} — **{job['title']}** @ "
+                     f"{job['company']}  {badge}"):
+        meta, dims = st.columns([1, 2])
+        with meta:
+            st.caption(f"{job.get('location') or '—'} · "
+                      f"{job.get('remote', '')} · via {_source_label(job)}")
+            st.link_button("Open job posting ↗", job["url"],
+                           key=f"hist_link_{job['id']}")
+            st.metric("Weighted score", score_label)
+            st.caption(f"Decision: **{decision}**")
+            if e.get("decided_at"):
+                st.caption(f"Date applied: {e['decided_at'][:10]}")
+        with dims:
+            for dim, d in (e.get("dimensions") or {}).items():
+                clamped = max(0, min(int(d["score"]), 100))
+                st.progress(clamped / 100,
+                           text=f"**{dim.replace('_', ' ')} — {d['score']}**"
+                                f"  ·  {d['reason']}")
+        if e.get("summary"):
+            st.markdown(f"*{e['summary']}*")
+
+        if e.get("cover_letter"):
+            st.divider()
+            st.text_area("✉️ Cover letter", e["cover_letter"], height=280,
+                         key=f"hist_letter_{job['id']}")
+            if e.get("resume_tweaks"):
+                st.markdown("**Resume tweaks**")
+                st.markdown(e["resume_tweaks"])
+            if e.get("review_notes"):
+                st.markdown("**🔍 Reviewer notes**")
+                st.caption(e["review_notes"])
+            kw = e.get("keyword_coverage")
+            if kw and (kw["covered"] or kw["missing"]):
+                total = len(kw["covered"]) + len(kw["missing"])
+                st.markdown(f"**🔑 Keyword coverage: "
+                           f"{len(kw['covered'])}/{total}**")
+                st.caption(f"✅ {', '.join(kw['covered']) or '—'}")
+                st.caption(f"⚠️ {', '.join(kw['missing']) or '—'}")
+
+        st.divider()
+        c1, c2, c3 = st.columns(3)
+        if c1.button("✅ Approve", key=f"hist_approve_{job['id']}",
+                     type="primary", disabled=decision == "approved"):
+            _history_decide(job, "approved")
+        if c2.button("❌ Reject", key=f"hist_reject_{job['id']}",
+                     disabled=decision == "rejected"):
+            _history_decide(job, "rejected")
+        if c3.button("⏭ Skip", key=f"hist_skip_{job['id']}",
+                     disabled=decision == "skipped"):
+            _history_decide(job, "skipped")
+
+
 def page_history() -> None:
     st.header("📚 History")
     entries = records.all()
@@ -579,13 +654,6 @@ def page_history() -> None:
 
     render_skill_gaps(entries)
     st.divider()
-
-    decisions = ["all"] + sorted(
-        {e.get("decision", "undecided") or "undecided" for e in entries})
-    pick = st.selectbox("Filter by decision", decisions)
-    if pick != "all":
-        entries = [e for e in entries
-                   if (e.get("decision") or "undecided") == pick]
 
     df = pd.DataFrame([{
         "updated": e.get("updated", ""),
@@ -611,53 +679,24 @@ def page_history() -> None:
         })
 
     st.subheader("🔍 Job details")
-    st.caption("Expand a row for the full score breakdown and — for jobs "
-              "that got that far — the saved application draft.")
-    for e in entries:
-        job = e["job"]
-        score = e.get("score")
-        decision = e.get("decision") or "undecided"
-        badge = {"approved": "✅ approved", "rejected": "❌ rejected",
-                 "skipped": "⏭ skipped"}.get(decision, "🕓 undecided")
-        score_label = f"{score:.0f}/100" if score is not None else "—"
-        with st.expander(f"{score_label} — **{job['title']}** @ "
-                         f"{job['company']}  {badge}"):
-            meta, dims = st.columns([1, 2])
-            with meta:
-                st.caption(f"{job.get('location') or '—'} · "
-                          f"{job.get('remote', '')} · via {_source_label(job)}")
-                st.link_button("Open job posting ↗", job["url"],
-                               key=f"hist_link_{job['id']}")
-                st.metric("Weighted score", score_label)
-                st.caption(f"Decision: **{decision}**")
-                if e.get("decided_at"):
-                    st.caption(f"Date applied: {e['decided_at'][:10]}")
-            with dims:
-                for dim, d in (e.get("dimensions") or {}).items():
-                    clamped = max(0, min(int(d["score"]), 100))
-                    st.progress(clamped / 100,
-                               text=f"**{dim.replace('_', ' ')} — {d['score']}**"
-                                    f"  ·  {d['reason']}")
-            if e.get("summary"):
-                st.markdown(f"*{e['summary']}*")
+    st.caption("Grouped by decision. Undecided is where a job lands if "
+              "you never clicked Approve/Reject/Skip on the Run page (or "
+              "it came from an unattended `--auto` run) — decide on it "
+              "here any time. Every tab's buttons work the same, so you "
+              "can change your mind later too.")
 
-            if e.get("cover_letter"):
-                st.divider()
-                st.text_area("✉️ Cover letter", e["cover_letter"], height=280,
-                             key=f"hist_letter_{job['id']}")
-                if e.get("resume_tweaks"):
-                    st.markdown("**Resume tweaks**")
-                    st.markdown(e["resume_tweaks"])
-                if e.get("review_notes"):
-                    st.markdown("**🔍 Reviewer notes**")
-                    st.caption(e["review_notes"])
-                kw = e.get("keyword_coverage")
-                if kw and (kw["covered"] or kw["missing"]):
-                    total = len(kw["covered"]) + len(kw["missing"])
-                    st.markdown(f"**🔑 Keyword coverage: "
-                               f"{len(kw['covered'])}/{total}**")
-                    st.caption(f"✅ {', '.join(kw['covered']) or '—'}")
-                    st.caption(f"⚠️ {', '.join(kw['missing']) or '—'}")
+    buckets: dict[str, list[dict]] = {key: [] for key, _ in DECISION_CATEGORIES}
+    for e in entries:
+        buckets[e.get("decision") or "undecided"].append(e)
+
+    tabs = st.tabs([f"{label} ({len(buckets[key])})"
+                   for key, label in DECISION_CATEGORIES])
+    for tab, (key, _) in zip(tabs, DECISION_CATEGORIES):
+        with tab:
+            if not buckets[key]:
+                st.caption("Nothing here.")
+            for e in buckets[key]:
+                render_history_entry(e)
 
     st.download_button(
         "⬇️ Export all records (JSON)",
