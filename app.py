@@ -32,7 +32,8 @@ from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, WRITING_SAMPLES_DIR,
                         extract_writing_samples_text, list_profile_documents,
                         list_writing_samples, load_profile)
 from src.memory import Memory
-from src.orchestrator import _relevance_rank, deterministic_filter
+from src.orchestrator import (_explain_empty_filter, _relevance_rank,
+                              deterministic_filter)
 from src.pipeline import fetch_jobs, verify_liveness
 from src.records import Records
 
@@ -605,14 +606,13 @@ def page_run() -> None:
             st.write(f"Found **{len(jobs)}** normalized, deduped jobs.")
 
             st.write("🛡️ Deterministic filters (before any LLM call)…")
-            jobs = deterministic_filter(jobs, profile, memory)
+            jobs, dropped = deterministic_filter(jobs, profile, memory)
             st.write(f"**{len(jobs)}** kept after seen/type/dealbreaker/"
                      "salary filters.")
             if not jobs:
                 status.update(label="Nothing new to review", state="complete")
                 st.session_state["scored"] = []
-                st.warning("No new jobs to score — broaden your target roles "
-                           "or review History.")
+                st.warning(_explain_empty_filter(dropped, profile))
                 return
 
             archetypes_config = profile.get("archetypes")

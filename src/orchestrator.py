@@ -67,11 +67,14 @@ def _relevance_rank(job: dict, target_roles: list[str]) -> int:
     return best
 
 
-def deterministic_filter(jobs: list[dict], profile: dict, memory: Memory) -> list[dict]:
+def deterministic_filter(jobs: list[dict], profile: dict,
+                         memory: Memory) -> tuple[list[dict], dict]:
     """SECURITY (deterministic guardrail): hard filters run BEFORE any LLM
     call — cheaper, and immune to prompt injection from job-posting text.
     Order: already-seen → employment type → dealbreakers → salary floor →
-    posting age."""
+    posting age. Returns (kept, dropped) where `dropped` counts why each
+    rejected job was rejected, so callers can explain a 0-kept result
+    instead of leaving the user guessing."""
     prefs = profile.get("preferences", {})
     dealbreakers = prefs.get("dealbreakers", [])
     allowed_types = prefs.get("employment_types", [])
@@ -106,7 +109,47 @@ def deterministic_filter(jobs: list[dict], profile: dict, memory: Memory) -> lis
         f"dealbreaker {dropped['dealbreaker']}, salary {dropped['salary']}, "
         f"stale {dropped['stale']})[/dim]"
     )
-    return kept
+    return kept, dropped
+
+
+_FILTER_LABELS = {
+    "seen": "already reviewed in a past run",
+    "type": "wrong employment type",
+    "dealbreaker": "hit a dealbreaker",
+    "salary": "below your salary floor",
+    "stale": "older than your posting-age limit",
+}
+
+
+def _explain_empty_filter(dropped: dict, profile: dict) -> str:
+    """Turn the drop-reason counts into one actionable sentence, naming
+    the dominant reason and the specific lever that would recover jobs.
+    Used identically by the CLI and the Streamlit UI so a 0-kept run is
+    never a dead end."""
+    ranked = sorted(((n, k) for k, n in dropped.items() if n),
+                    reverse=True)
+    if not ranked:
+        return "No jobs matched — broaden your target roles or review History."
+    parts = ", ".join(f"{n} {_FILTER_LABELS[k]}" for n, k in ranked)
+    top = ranked[0][1]
+    if top == "seen":
+        fix = ("These are jobs you've already seen — they're in History. "
+               "For genuinely new postings, broaden your target roles/sources "
+               "or clear .jobscout_memory.json to reset what's been seen.")
+    elif top == "type":
+        types = ", ".join(profile.get("preferences", {}).get(
+            "employment_types", []) or ["(none)"])
+        fix = (f"Your employment types are set to [{types}] — postings not "
+               "labeled that way are dropped. Add more types on the Profile "
+               "page to widen the net.")
+    elif top == "stale":
+        fix = ("Raise or clear 'only show postings from the last N days' on "
+               "the Profile page.")
+    elif top == "salary":
+        fix = "Lower your salary floor on the Profile page."
+    else:
+        fix = "Relax the dealbreakers in your profile."
+    return f"Dropped: {parts}. {fix}"
 
 
 async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
@@ -143,10 +186,10 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
     console.print(f"Found [bold]{len(jobs)}[/bold] normalized, deduped jobs.")
 
     # ---- 3. Deterministic filter (before ANY LLM call) --------------------
-    jobs = deterministic_filter(jobs, profile, memory)
+    jobs, dropped = deterministic_filter(jobs, profile, memory)
     if not jobs:
-        console.print("[yellow]Nothing new to score — try broadening your "
-                      "profile keywords or clearing .jobscout_memory.json[/yellow]")
+        console.print("[yellow]Nothing new to score. "
+                      f"{_explain_empty_filter(dropped, profile)}[/yellow]")
         return
 
     # Archetype tag + Block G legitimacy check: both deterministic, both

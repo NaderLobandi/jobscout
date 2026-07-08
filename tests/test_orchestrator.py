@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from src.memory import Memory
-from src.orchestrator import deterministic_filter
+from src.orchestrator import _explain_empty_filter, deterministic_filter
 
 
 def _job(job_id: str, posted_days_ago: int | None = None, **overrides) -> dict:
@@ -25,7 +25,7 @@ def test_max_posting_age_drops_stale_jobs(tmp_path):
     profile = {"preferences": {"max_posting_age_days": 7}}
     jobs = [_job("fresh", posted_days_ago=2), _job("stale", posted_days_ago=30)]
 
-    kept = deterministic_filter(jobs, profile, memory)
+    kept, _ = deterministic_filter(jobs, profile, memory)
 
     assert [j["id"] for j in kept] == ["fresh"]
 
@@ -35,7 +35,8 @@ def test_max_posting_age_drops_undated_jobs_when_set(tmp_path):
     profile = {"preferences": {"max_posting_age_days": 7}}
     jobs = [_job("undated", posted_days_ago=None)]
 
-    assert deterministic_filter(jobs, profile, memory) == []
+    kept, _ = deterministic_filter(jobs, profile, memory)
+    assert kept == []
 
 
 def test_max_posting_age_unset_keeps_everything(tmp_path):
@@ -43,7 +44,7 @@ def test_max_posting_age_unset_keeps_everything(tmp_path):
     profile = {"preferences": {}}  # no max_posting_age_days -> filter off
     jobs = [_job("undated", posted_days_ago=None), _job("old", posted_days_ago=400)]
 
-    kept = deterministic_filter(jobs, profile, memory)
+    kept, _ = deterministic_filter(jobs, profile, memory)
 
     assert {j["id"] for j in kept} == {"undated", "old"}
 
@@ -63,6 +64,46 @@ def test_internship_only_drops_unlabeled_fulltime_jobs(tmp_path):
              title="Machine Learning Engineer", employment_type="unknown"),
     ]
 
-    kept = deterministic_filter(jobs, profile, memory)
+    kept, _ = deterministic_filter(jobs, profile, memory)
 
     assert [j["id"] for j in kept] == ["real_intern"]
+
+
+def test_deterministic_filter_reports_drop_reasons(tmp_path):
+    # The real "12 found, 0 kept" case: the caller needs to know WHY,
+    # not just that nothing survived.
+    memory = Memory(tmp_path / "mem.json")
+    memory.mark_seen("old", "ML Engineer", "scored")
+    profile = {"preferences": {"employment_types": ["internship"]}}
+    jobs = [_job("old", posted_days_ago=1),
+            _job("ft", posted_days_ago=1, employment_type="unknown")]
+
+    kept, dropped = deterministic_filter(jobs, profile, memory)
+
+    assert kept == []
+    assert dropped["seen"] == 1
+    assert dropped["type"] == 1
+
+
+def test_explain_empty_filter_names_dominant_reason_and_lever():
+    profile = {"preferences": {"employment_types": ["internship"]}}
+    # "seen"-dominant → points at History / memory reset
+    seen_msg = _explain_empty_filter(
+        {"seen": 10, "type": 2, "dealbreaker": 0, "salary": 0, "stale": 0},
+        profile)
+    assert "already reviewed" in seen_msg
+    assert "History" in seen_msg
+    # "type"-dominant → names the actual configured types and the lever
+    type_msg = _explain_empty_filter(
+        {"seen": 0, "type": 5, "dealbreaker": 0, "salary": 0, "stale": 0},
+        profile)
+    assert "internship" in type_msg
+    assert "employment types" in type_msg
+
+
+def test_explain_empty_filter_handles_no_drops():
+    # Defensive: an all-zero breakdown must still return a usable sentence.
+    msg = _explain_empty_filter(
+        {"seen": 0, "type": 0, "dealbreaker": 0, "salary": 0, "stale": 0},
+        {"preferences": {}})
+    assert "broaden" in msg.lower()
