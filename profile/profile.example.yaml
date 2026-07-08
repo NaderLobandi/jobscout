@@ -14,6 +14,13 @@ preferences:
   target_roles:
     - Machine Learning Engineer
     - Research Engineer
+  # Keyword breadth. Default (false) broadens each target role so it
+  # surfaces far more postings: "Machine Learning Engineer" also matches
+  # "ML Engineer", "Machine Learning Scientist", etc. (see
+  # src/query_expansion.py — deterministic, no LLM), and the scorer ranks
+  # relevance. Exact-phrase matching alone matches almost nothing on real
+  # boards. Set true only if you want verbatim title matches and less noise.
+  strict_keyword_match: false
   seniority: [mid, senior]
   industries: [AI/ML, healthcare, fintech]
   locations: [Denver, Remote US]

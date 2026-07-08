@@ -13,12 +13,18 @@ import json
 from mcp import ClientSession
 
 from ..guardrails import audit
+from ..query_expansion import expand_keywords
 
 
 def build_query(profile: dict) -> dict:
     prefs = profile.get("preferences", {})
+    roles = prefs.get("target_roles", [])
+    # Broaden by default so exact-phrase role titles don't starve recall
+    # (see src/query_expansion.py); precision is the scorer's job. Opt out
+    # with strict_keyword_match: true for verbatim-only matching.
+    keywords = roles if prefs.get("strict_keyword_match") else expand_keywords(roles)
     return {
-        "keywords": prefs.get("target_roles", []),
+        "keywords": keywords,
         "locations": prefs.get("locations", []),
         "remote_only": prefs.get("remote_preference") == "remote_only",
         "limit_per_source": 25,

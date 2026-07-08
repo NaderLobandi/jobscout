@@ -11,9 +11,23 @@ from pathlib import Path
 import httpx
 
 from adapters import ashby, jsearch, lever, linkedin, remoteok, themuse
+from adapters.base import matches_keywords
 from schema import SearchQuery
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_matches_keywords_is_word_boundary_anchored():
+    # Whole-word/phrase match, case-insensitive.
+    assert matches_keywords("Senior ML Engineer", ["ml"])
+    assert matches_keywords("Generative AI Engineer", ["ai"])
+    assert matches_keywords("Machine Learning Scientist", ["machine learning"])
+    # Short abbreviations must NOT match as substrings of unrelated words —
+    # this is what makes broad expansion (query_expansion.py) safe.
+    assert not matches_keywords("HTML developer", ["ml"])
+    assert not matches_keywords("Paid training program", ["ai"])
+    # Empty keyword list matches everything (no filter).
+    assert matches_keywords("anything", [])
 
 
 def _mock_client(payload, adapter_module, monkeypatch):

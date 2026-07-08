@@ -10,6 +10,7 @@ no code path that can write to any job platform.
 
 from __future__ import annotations
 
+import re
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -48,16 +49,30 @@ def http_client() -> httpx.AsyncClient:
 def matches_keywords(text: str, keywords: list[str]) -> bool:
     """Client-side keyword filter for boards without a search parameter.
     Empty keyword list matches everything. A job matches if ANY keyword
-    phrase appears verbatim (case-insensitive) in the text.
+    phrase appears as a WHOLE WORD/PHRASE (case-insensitive) in the text.
 
-    Deliberately a literal substring check, not bag-of-words: matching
-    each word of a multi-word phrase independently ANYWHERE in a long job
+    Deliberately a literal phrase check, not bag-of-words: matching each
+    word of a multi-word phrase independently ANYWHERE in a long job
     description produces false positives (e.g. a Marketing role whose
     boilerplate separately mentions "research" and "engineering" would
     satisfy a "Research Engineer" keyword under bag-of-words matching even
     though the actual role is unrelated). Same discipline as
-    violates_dealbreakers() in guardrails.py."""
+    violates_dealbreakers() in guardrails.py.
+
+    Word-boundary anchored (not raw substring): short expanded keywords
+    like "ml"/"ai"/"nlp" (see src/query_expansion.py) must match the WORD
+    "AI", not the "ai" inside "training"/"maintain"/"retail". The anchor is
+    dropped on a side whose keyword edge isn't alphanumeric (e.g. "c++",
+    ".net") so those still match."""
     if not keywords:
         return True
     t = text.lower()
-    return any(kw.strip().lower() in t for kw in keywords if kw.strip())
+    for kw in keywords:
+        kw = kw.strip().lower()
+        if not kw:
+            continue
+        left = r"\b" if kw[0].isalnum() else ""
+        right = r"\b" if kw[-1].isalnum() else ""
+        if re.search(left + re.escape(kw) + right, t):
+            return True
+    return False

@@ -607,7 +607,13 @@ Path to production:
 ## Honest limitations
 
 - **No auto-submit, by design** — JobScout prepares; you apply.
-- Adapter keyword matching is substring-based; niche phrasing can miss.
+- Adapter keyword matching is word-boundary phrase matching. By default
+  JobScout **broadens** each target role (`src/query_expansion.py`) so
+  "Machine Learning Engineer" also surfaces "ML Engineer", "Machine
+  Learning Scientist", etc. — exact-phrase-only matching starved results
+  to a handful that repeated every run. Broadening trades some precision
+  for recall (the scorer ranks relevance downstream); set
+  `preferences.strict_keyword_match: true` for verbatim-only matching.
 - Tier B adapters (Adzuna, USAJOBS) are implemented but exercised less than
   the keyless Tier A boards.
 - Scoring costs tokens: default caps at 6 jobs/run (`--max-score` to change).

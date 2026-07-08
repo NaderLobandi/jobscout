@@ -243,6 +243,16 @@ def page_profile() -> None:
         locations = c2.text_input(
             "Locations (comma-separated)",
             ", ".join(prefs.get("locations", ["Remote US"])))
+        strict_keywords_pref = st.checkbox(
+            "🎯 Match role titles exactly (strict) — fewer, tighter results",
+            value=bool(prefs.get("strict_keyword_match", False)),
+            help="Off by default. Normally JobScout broadens each target "
+                 "role to surface far more postings — 'Machine Learning "
+                 "Engineer' also matches 'ML Engineer', 'Machine Learning "
+                 "Scientist', etc. — and lets the scorer rank relevance. "
+                 "Exact-phrase titles alone match almost nothing on real "
+                 "boards, so leave this OFF unless you're getting too much "
+                 "noise and want only verbatim title matches.")
         c1, c2, c3 = st.columns(3)
         employment_types = c1.multiselect(
             "Employment types", EMPLOYMENT_TYPES,
@@ -373,6 +383,7 @@ def page_profile() -> None:
             "preferences": {
                 "employment_types": employment_types or ["full-time"],
                 "target_roles": _csv(target_roles),
+                "strict_keyword_match": bool(strict_keywords_pref),
                 "seniority": seniority,
                 "industries": _csv(industries),
                 "locations": _csv(locations),

@@ -45,7 +45,22 @@ Five components per the course framework: **model** (Claude API),
 (the loop), **deployment** (Docker + docs).
 
 1. Intake: if `profile/profile.yaml` missing/incomplete → run wizard
-2. Search: Search Agent builds `SearchQuery` from profile → MCP `search_jobs`
+2. Search: Search Agent builds `SearchQuery` from profile → MCP `search_jobs`.
+   `build_query()` broadens the profile's `target_roles` into a wider
+   keyword set via `src/query_expansion.py` (deterministic, no LLM) UNLESS
+   `preferences.strict_keyword_match` is true. Rationale (recall vs.
+   precision): the board-side keyword match is a RECALL filter — surface
+   every plausible posting — while PRECISION is the scorer's job (0-100 per
+   dimension). Exact-phrase role titles ("Machine Learning Engineer")
+   match almost nothing on real boards, which starved results: the same
+   few jobs surfaced every run and the seen-dedup then reported "nothing
+   new." Expansion adds the seniority-stripped core, the role-noun-stripped
+   domain ("machine learning"), and abbreviation equivalents (ML ↔ machine
+   learning, AI ↔ artificial intelligence). Originals stay first because
+   the LinkedIn adapter searches only `keywords[0]`.
+   `adapters/base.matches_keywords()` is anchored to word boundaries (not
+   raw substring) so short abbreviations ("ml", "ai") match the WORD, not
+   the "ai" inside "training" — this is what makes broadening safe.
 3. Filter: deterministic dealbreaker + employment-type + salary-floor +
    posting-age filters BEFORE scoring. `guardrails.posting_is_recent()`
    drops anything older than `preferences.max_posting_age_days` — and,
