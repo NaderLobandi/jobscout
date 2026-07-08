@@ -35,7 +35,8 @@ from .contacts import find_contacts
 from .cv_pipeline import generate_cv_pdf
 from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
                          posting_is_recent, violates_dealbreakers)
-from .intake import extract_profile_text, load_profile, run_wizard
+from .intake import (extract_profile_text, extract_writing_samples_text,
+                     load_profile, run_wizard)
 from .keyword_coverage import keyword_coverage
 from .liveness import filter_dead_postings
 from .memory import Memory
@@ -167,6 +168,13 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
                   "documents (PII-masked)…[/bold cyan]")
     skills_profile = scoring_agent.analyze_resume(client, resume_text, summary)
 
+    voice_profile = ""
+    samples_text = masker.mask(extract_writing_samples_text())
+    if samples_text:
+        console.print("[bold cyan]🎙️  Learning your writing style from "
+                      "uploaded samples (PII-masked)…[/bold cyan]")
+        voice_profile = scoring_agent.extract_voice_profile(client, samples_text)
+
     prefs = profile.get("preferences", {})
     weights = profile.get("weights", {})
     # Rank by title relevance before capping — the scoring budget should go
@@ -231,9 +239,11 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
             try:
                 style = candidate.get("communication_style", "")
                 drafts = drafting_agent.draft_package(client, skills_profile,
-                                                      job, package, style)
+                                                      job, package, style,
+                                                      voice_profile)
                 review = drafting_agent.review_draft(
-                    client, skills_profile, job, drafts["cover_letter"], style)
+                    client, skills_profile, job, drafts["cover_letter"], style,
+                    voice_profile)
                 # SECURITY: unmask ONLY here — final local render for human
                 # eyes; the unmasked text never goes back through the model.
                 package["cover_letter"] = masker.unmask(review["revised_cover_letter"])
@@ -243,7 +253,7 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
                 package["keyword_coverage"] = keyword_coverage(job, package["cover_letter"])
                 package["cv_pdf_path"] = generate_cv_pdf(
                     client, resume_text, skills_profile, job, candidate,
-                    masker, CV_OUTPUT_DIR)
+                    masker, CV_OUTPUT_DIR, voice_profile)
                 draft_ok = True
             except Exception as exc:
                 console.print(f"[red]drafting failed: {exc}[/red]")

@@ -28,6 +28,9 @@ EXAMPLE_PATH = REPO_ROOT / "profile" / "profile.example.yaml"
 DOCUMENTS_DIR = REPO_ROOT / "profile" / "documents"
 RESUME_PATH = REPO_ROOT / "profile" / "resume.pdf"
 SUPPORTED_DOC_SUFFIXES = (".pdf", ".txt", ".md")
+# Nested under DOCUMENTS_DIR so the existing profile/documents/*
+# gitignore pattern covers these too, with no separate rule needed.
+WRITING_SAMPLES_DIR = DOCUMENTS_DIR / "writing_samples"
 
 console = Console()
 
@@ -91,6 +94,34 @@ def extract_profile_text(profile: dict) -> str:
         if text:
             sections.append(f"--- Supplementary document: {doc_path.name} ---\n{text}")
 
+    return "\n\n".join(sections)
+
+
+def list_writing_samples() -> list[str]:
+    """Filenames currently saved under profile/documents/writing_samples/,
+    for UI display. Kept as its own subdirectory (not mixed into
+    profile/documents/'s top level) so extract_profile_text()'s
+    non-recursive scan never picks these up as resume/skills material —
+    voice and substance are deliberately separate pipelines."""
+    if not WRITING_SAMPLES_DIR.exists():
+        return []
+    return sorted(
+        p.name for p in WRITING_SAMPLES_DIR.iterdir()
+        if p.is_file() and p.suffix.lower() in SUPPORTED_DOC_SUFFIXES
+    )
+
+
+def extract_writing_samples_text() -> str:
+    """Combined plain text from every saved writing sample. Empty string
+    if none are present — voice matching is a no-op without them, same
+    degrade-gracefully pattern as extract_profile_text()."""
+    sections: list[str] = []
+    for path in (WRITING_SAMPLES_DIR.iterdir() if WRITING_SAMPLES_DIR.exists() else []):
+        if not path.is_file() or path.suffix.lower() not in SUPPORTED_DOC_SUFFIXES:
+            continue
+        text = _extract_text(path)
+        if text:
+            sections.append(f"--- Writing sample: {path.name} ---\n{text}")
     return "\n\n".join(sections)
 
 

@@ -16,11 +16,12 @@ from .guardrails import PIIMasker
 
 def generate_cv_pdf(client: Anthropic, masked_resume: str, skills_profile: str,
                     job: dict, candidate: dict, masker: PIIMasker,
-                    output_dir: Path) -> str:
+                    output_dir: Path, voice_profile: str = "") -> str:
     """Tailor + render + write to `output_dir/<job_id>.pdf`. Returns the
     path as a string (for storing in Records) — raises on failure, same
     as draft_package/review_draft, so callers can catch alongside them."""
-    sections = drafting_agent.tailor_cv(client, masked_resume, skills_profile, job)
+    sections = drafting_agent.tailor_cv(client, masked_resume, skills_profile,
+                                        job, voice_profile)
     pdf_bytes = render_cv_pdf(sections, candidate, masker)
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / f"{job['id']}.pdf"

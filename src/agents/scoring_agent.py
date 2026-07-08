@@ -52,6 +52,24 @@ SCORE_SCHEMA = {
 }
 
 
+def extract_voice_profile(client: Anthropic, masked_samples: str) -> str:
+    """One call per session: distill the candidate's own (masked) past
+    writing into a compact style descriptor, reused for every draft this
+    session — same token-efficiency reasoning as analyze_resume(). Empty
+    string in, empty string out: no LLM call is made by the CALLER when
+    there are no writing samples (see app.py/orchestrator.py), so this
+    only ever runs when there's real text to distill."""
+    audit("llm.extract_voice_profile", {"chars": len(masked_samples)})
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=500,
+        system=load_skill("voice-matching"),
+        messages=[{"role": "user", "content": masked_samples}],
+        **thinking_kwargs(),
+    )
+    return next(b.text for b in response.content if b.type == "text")
+
+
 def analyze_resume(client: Anthropic, masked_resume: str, summary: str) -> str:
     """One call per session: condense the masked resume into a dense skills
     profile that is reused for every job scored (token efficiency)."""

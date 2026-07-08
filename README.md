@@ -65,7 +65,7 @@ no matter how many boards exist behind it (the NxM integration problem).
 | **Multi-agent system** | Orchestrator + search/scoring/drafting/review/insights sub-agents (`src/agents/`) |
 | **Custom MCP server** | `mcp-server/job_search_server.py`, stdio transport, official Python SDK |
 | **Security features** | HITL gate, PII masking, audit log, least privilege, deterministic filters, prompt-injection defense (`src/guardrails.py`) |
-| **Agent Skills** | Six SKILL.md skills with progressive disclosure (`skills/`) |
+| **Agent Skills** | Seven SKILL.md skills with progressive disclosure (`skills/`) |
 | **Memory** | Cross-session seen/approved tracking (`src/memory.py`) |
 | **Evals + tests** | pytest for deterministic parts, LLM-as-judge for the scoring agent (`tests/`, `evals/`) |
 | **Deployability** | `Dockerfile` + path to production below |
@@ -93,7 +93,9 @@ there is combined with your resume, masked the same way, before analysis.
 On the **👤 Profile** page, a "🔍 Preview PDF text extraction" panel lets
 you check what text actually got pulled out of your PDFs before any of it
 reaches an LLM — useful for catching a scanned/image-only resume with no
-real text layer.
+real text layer. You can also drop past cover letters or emails into
+`profile/documents/writing_samples/` (or upload them on the Profile
+page) — see "Voice Matching" below.
 
 **Cost tip:** the agents default to `claude-opus-4-8`. For development, demo
 runs, and eval iterations, set `JOBSCOUT_MODEL=claude-haiku-4-5` in `.env` —
@@ -115,12 +117,14 @@ guardrails, and agents):
 - **👤 Profile** — full intake form: contact info, resume PDF upload +
   supplementary documents, a "🔍 Preview PDF text extraction" panel to
   verify what actually got pulled out of a PDF before it reaches an LLM,
-  cover-letter tone (`communication_style`: direct / collaborative /
-  enthusiastic), target roles, preferences, dealbreakers, an
-  **only-show-postings-from-the-last-N-days** filter, per-dimension
-  scoring weights, draft threshold, and job sources (including Lever/Ashby
-  company tokens and the LinkedIn ToS acknowledgment). Saves to
-  `profile/profile.yaml` (gitignored).
+  a **writing-samples uploader** that learns your actual tone instead of
+  (or on top of) picking a `communication_style` preset (direct /
+  collaborative / enthusiastic), target roles, preferences, dealbreakers,
+  an **only-show-postings-from-the-last-N-days** filter, optional
+  Playwright liveness verification, per-dimension scoring weights, draft
+  threshold, and job sources (including Lever/Ashby company tokens and
+  the LinkedIn ToS acknowledgment). Saves to `profile/profile.yaml`
+  (gitignored).
 - **🚀 Run JobScout** — one click runs search → deterministic filter →
   **archetype tagging** (🏷️ a role-category label — Research, Applied
   ML/MLOps, Agentic/LLM Systems, etc. — from a keyword taxonomy you can
@@ -129,8 +133,9 @@ guardrails, and agents):
   analysis → per-job scoring with live progress, with an optional
   **"stop early once N found"** goal so it keeps scoring more jobs (up to
   your cost cap) instead of a fixed batch. Each match expands into a
-  score-dimension breakdown, a drafted cover letter that's already been
-  through a second-pass reviewer critique + resume tweaks, a **tailored,
+  score-dimension breakdown, a drafted cover letter — in your own voice,
+  if you've uploaded writing samples — that's already been through a
+  second-pass reviewer critique + resume tweaks, a **tailored,
   ATS-optimized CV PDF** you can download directly, a deterministic
   **keyword-coverage check** against the posting (no LLM call — which of
   the posting's own key terms actually made it into the letter), an
@@ -435,6 +440,33 @@ What JobScout does to keep the risk as low as it can be made:
 None of that changes what it is: automated access that LinkedIn's terms
 prohibit. If that trade-off isn't acceptable to you, leave it off — every
 other source is unaffected.
+
+## Voice Matching
+
+Upload past cover letters, emails, or anything else in your own words —
+Profile page uploader, or drop files into
+`profile/documents/writing_samples/` — and drafted cover letters and
+tailored CVs will sound like you actually wrote them, not like the
+default Claude voice.
+
+How it stays honest: `skills/voice-matching/SKILL.md` distills your
+samples into a compact descriptor of **style only** — sentence rhythm,
+formality, vocabulary habits, how you open and close a piece of writing.
+It's explicitly forbidden from extracting facts, achievements, or claims
+from the samples (that's resume-analysis's job, working from your actual
+resume) — a cover letter mentioning a real achievement doesn't let that
+achievement leak into your skills profile through the back door, and
+vice versa: `extract_profile_text()` never recurses into
+`writing_samples/`, so a writing sample can't accidentally get read as
+resume material either. The two pipelines are kept structurally
+separate, not just instructed to behave.
+
+If you upload samples, the learned voice profile overrides the
+`communication_style` preset (direct/collaborative/enthusiastic) — a
+real learned style is strictly more specific than a category label. No
+samples uploaded, nothing changes: this is a pure opt-in, same
+zero-behavior-change-when-unset discipline as every other optional
+preference in this README.
 
 ## Archetype Tagging
 

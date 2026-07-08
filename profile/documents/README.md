@@ -31,3 +31,18 @@ yourself before adding it here, or leave it out.
 
 This whole folder is gitignored except this file — nothing you add here
 is ever committed.
+
+## `writing_samples/` — a different purpose, kept separate on purpose
+
+Files placed directly in this folder feed **resume analysis** (facts:
+skills, achievements, experience). Files placed in the `writing_samples/`
+subfolder instead feed **voice matching** (style only: sentence rhythm,
+formality, vocabulary — see `skills/voice-matching/SKILL.md`), so drafted
+cover letters and tailored CVs sound like you actually wrote them. The
+two are deliberately never mixed: `extract_profile_text()` doesn't
+recurse into subfolders, so a writing sample never leaks into your
+skills profile, and voice-matching never extracts facts from a sample —
+just how it's written. Add samples via the Streamlit Profile page's
+"Writing samples" uploader, or drop files directly into
+`profile/documents/writing_samples/`. Same supported formats, same PII
+handling, same gitignore coverage as above.

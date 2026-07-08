@@ -18,7 +18,10 @@ skills profile, and ONE job posting wrapped in <job_posting> tags.
 Restructure — never invent — the resume into these sections:
 
 1. **Summary**: 2-3 sentences, tailored to this role, drawing only on
-   real experience already present in the resume.
+   real experience already present in the resume. If a learned style
+   profile is given, this is the section where it matters most — bullets
+   and dates below are terse structured facts with little room for
+   "voice," but the summary is free prose.
 2. **Skills**: reorder the candidate's real skills so the ones most
    relevant to this posting appear first. Do not add a skill that isn't
    evidenced in the resume, even one the posting explicitly asks for.

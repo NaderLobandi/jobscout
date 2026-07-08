@@ -12,6 +12,10 @@ def _isolate(monkeypatch, tmp_path):
     touch the real profile/ folder."""
     monkeypatch.setattr(intake, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(intake, "DOCUMENTS_DIR", tmp_path / "profile" / "documents")
+    # WRITING_SAMPLES_DIR is computed from DOCUMENTS_DIR at import time, so
+    # patching DOCUMENTS_DIR above doesn't move it too — set it explicitly.
+    monkeypatch.setattr(intake, "WRITING_SAMPLES_DIR",
+                        tmp_path / "profile" / "documents" / "writing_samples")
 
 
 def test_extract_profile_text_labels_resume_and_documents(monkeypatch, tmp_path):
@@ -86,3 +90,48 @@ def test_extract_all_saved_documents_empty_when_nothing_saved(monkeypatch, tmp_p
     _isolate(monkeypatch, tmp_path)
     monkeypatch.setattr(intake, "RESUME_PATH", tmp_path / "profile" / "resume.pdf")
     assert intake.extract_all_saved_documents() == ""
+
+
+def test_list_writing_samples(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    samples_dir = tmp_path / "profile" / "documents" / "writing_samples"
+    samples_dir.mkdir(parents=True)
+    (samples_dir / "cover_letter.txt").write_text("Dear hiring team...")
+    (samples_dir / "notes.docx").write_text("ignored")
+
+    assert intake.list_writing_samples() == ["cover_letter.txt"]
+
+
+def test_list_writing_samples_missing_dir(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    assert intake.list_writing_samples() == []
+
+
+def test_extract_writing_samples_text_labels_each_sample(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    samples_dir = tmp_path / "profile" / "documents" / "writing_samples"
+    samples_dir.mkdir(parents=True)
+    (samples_dir / "email.txt").write_text("Hi there, following up on...")
+
+    text = intake.extract_writing_samples_text()
+    assert "--- Writing sample: email.txt ---" in text
+    assert "Hi there, following up on..." in text
+
+
+def test_extract_writing_samples_text_empty_when_none_saved(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    assert intake.extract_writing_samples_text() == ""
+
+
+def test_writing_samples_never_leak_into_extract_profile_text(monkeypatch, tmp_path):
+    """extract_profile_text() (resume/skills analysis) must never recurse
+    into writing_samples/ — voice and substance stay on separate pipelines
+    structurally, not just by instruction to the model."""
+    _isolate(monkeypatch, tmp_path)
+    docs_dir = tmp_path / "profile" / "documents"
+    samples_dir = docs_dir / "writing_samples"
+    samples_dir.mkdir(parents=True)
+    (samples_dir / "cover_letter.txt").write_text("UNIQUE_VOICE_MARKER_TEXT")
+
+    text = intake.extract_profile_text({"candidate": {}})
+    assert "UNIQUE_VOICE_MARKER_TEXT" not in text

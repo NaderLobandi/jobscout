@@ -26,11 +26,20 @@ from anthropic import Anthropic
 from . import MODEL, load_skill, thinking_kwargs
 from ..guardrails import audit
 
-def _style_line(communication_style: str) -> str:
-    """Formats the optional communication-style hint for the drafting and
-    review prompts. Empty string (no line at all) when unset, so an
-    unset style changes nothing about the prompt an existing profile
-    would have produced before this feature existed."""
+def _style_line(communication_style: str, voice_profile: str = "") -> str:
+    """Formats the optional tone guidance for the drafting/review/CV
+    prompts. A learned voice_profile — distilled from the candidate's own
+    uploaded writing samples — takes priority over the coarse
+    communication_style preset when both are set: it's strictly more
+    specific, and layering a generic label on top of a real learned
+    style would just muddy the guidance. Empty string (no line at all)
+    when neither is set, so an unset profile changes nothing about the
+    prompt an existing setup would have produced before this feature
+    existed."""
+    if voice_profile:
+        return ("\nWrite in the candidate's own voice, based on this "
+                "style profile learned from their real writing samples:\n"
+                f"{voice_profile}\n")
     if not communication_style:
         return ""
     return f"\nCommunication style: {communication_style}\n"
@@ -51,7 +60,8 @@ DRAFT_SCHEMA = {
 
 
 def draft_package(client: Anthropic, skills_profile: str, job: dict,
-                  scoring: dict, communication_style: str = "") -> dict:
+                  scoring: dict, communication_style: str = "",
+                  voice_profile: str = "") -> dict:
     audit("llm.draft_package", {"job_id": job["id"], "title": job["title"]})
     response = client.messages.create(
         model=MODEL,
@@ -62,7 +72,7 @@ def draft_package(client: Anthropic, skills_profile: str, job: dict,
             "role": "user",
             "content": (
                 f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n"
-                f"{_style_line(communication_style)}\n"
+                f"{_style_line(communication_style, voice_profile)}\n"
                 f"WHY THIS JOB SCORED {scoring['score']}/100:\n{scoring['summary']}\n\n"
                 "<job_posting>\n"
                 f"Title: {job['title']}\nCompany: {job['company']}\n"
@@ -109,7 +119,8 @@ REVIEW_SCHEMA = {
 
 
 def review_draft(client: Anthropic, skills_profile: str, job: dict,
-                 cover_letter: str, communication_style: str = "") -> dict:
+                 cover_letter: str, communication_style: str = "",
+                 voice_profile: str = "") -> dict:
     """Fresh-context critique of an already-drafted cover letter. Call
     this AFTER draft_package() and BEFORE unmasking — it operates on the
     same masked text draft_package produced and must never see real PII.
@@ -126,7 +137,7 @@ def review_draft(client: Anthropic, skills_profile: str, job: dict,
             "role": "user",
             "content": (
                 f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n"
-                f"{_style_line(communication_style)}\n"
+                f"{_style_line(communication_style, voice_profile)}\n"
                 "<job_posting>\n"
                 f"Title: {job['title']}\nCompany: {job['company']}\n"
                 f"Description: {job['description']}\n"
@@ -180,12 +191,16 @@ CV_SCHEMA = {
 
 
 def tailor_cv(client: Anthropic, masked_resume: str, skills_profile: str,
-             job: dict) -> dict:
+             job: dict, voice_profile: str = "") -> dict:
     """Restructure the candidate's REAL resume into ATS-friendly sections
     tailored to one job — selection, reordering, and rephrasing only,
     never new facts. Works from the full masked resume text (not just the
     condensed skills_profile) so the LLM has real dates/companies/bullets
     to draw from instead of inventing plausible-looking specifics.
+
+    voice_profile (optional) applies mainly to the free-prose summary
+    section — bullets and dates are terse structured facts with little
+    room for "voice" — but is passed through regardless of section.
 
     Returns masked CV sections — src/cv_render.py unmasks locally, once,
     only at final PDF render."""
@@ -199,7 +214,8 @@ def tailor_cv(client: Anthropic, masked_resume: str, skills_profile: str,
             "role": "user",
             "content": (
                 f"CANDIDATE SKILLS PROFILE (PII-masked, condensed):\n"
-                f"{skills_profile}\n\n"
+                f"{skills_profile}\n"
+                f"{_style_line('', voice_profile)}\n"
                 f"FULL MASKED RESUME (source of truth for real facts):\n"
                 f"{masked_resume or '(no resume provided)'}\n\n"
                 "<job_posting>\n"

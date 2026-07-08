@@ -27,8 +27,10 @@ from src.cv_pipeline import generate_cv_pdf
 from src.guardrails import PIIMasker
 from src.insights import aggregate_dimension_gaps
 from src.keyword_coverage import keyword_coverage
-from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, extract_all_saved_documents,
-                        extract_profile_text, list_profile_documents, load_profile)
+from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, WRITING_SAMPLES_DIR,
+                        extract_all_saved_documents, extract_profile_text,
+                        extract_writing_samples_text, list_profile_documents,
+                        list_writing_samples, load_profile)
 from src.memory import Memory
 from src.orchestrator import _relevance_rank, deterministic_filter
 from src.pipeline import fetch_jobs, verify_liveness
@@ -168,7 +170,9 @@ def page_profile() -> None:
             index=style_options.index(cand.get("communication_style", ""))
             if cand.get("communication_style", "") in style_options else 0,
             help="Calibrates the drafting agent's tone. Blank = natural, "
-                 "confident default.")
+                 "confident default. Overridden by a learned voice profile "
+                 "if you upload writing samples below — a real learned "
+                 "style beats a coarse preset.")
 
         resume_file = st.file_uploader("Resume (PDF)", type=["pdf"])
         current_resume = REPO_ROOT / "profile" / "resume.pdf"
@@ -188,6 +192,21 @@ def page_profile() -> None:
         existing_docs = list_profile_documents()
         if existing_docs:
             st.caption(f"📎 Already on file: {', '.join(existing_docs)} "
+                       "(uploads add to this list, don't replace it)")
+
+        writing_samples = st.file_uploader(
+            "Writing samples (optional) — past cover letters, emails, "
+            "anything in your own voice",
+            type=["pdf", "txt", "md"], accept_multiple_files=True,
+            help="Used ONLY to learn your writing style (sentence rhythm, "
+                 "formality, vocabulary) so drafted cover letters and "
+                 "tailored CVs sound like you — never to extract facts or "
+                 "claims (that's what the resume/documents above are "
+                 "for). PII-masked the same way. Leave empty to use the "
+                 "Cover letter tone preset below instead.")
+        existing_samples = list_writing_samples()
+        if existing_samples:
+            st.caption(f"🎙️ Already on file: {', '.join(existing_samples)} "
                        "(uploads add to this list, don't replace it)")
 
         st.subheader("What you're looking for")
@@ -351,10 +370,17 @@ def page_profile() -> None:
                 safe_name = Path(f.name).name
                 if safe_name:
                     (DOCUMENTS_DIR / safe_name).write_bytes(f.getvalue())
+        if writing_samples:
+            WRITING_SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
+            for f in writing_samples:
+                safe_name = Path(f.name).name
+                if safe_name:
+                    (WRITING_SAMPLES_DIR / safe_name).write_bytes(f.getvalue())
         PROFILE_PATH.parent.mkdir(exist_ok=True)
         PROFILE_PATH.write_text(yaml.safe_dump(profile, sort_keys=False))
-        # A changed resume/profile/documents invalidates the cached analysis
+        # A changed resume/profile/documents/samples invalidates the caches
         st.session_state.pop("skills_profile", None)
+        st.session_state.pop("voice_profile", None)
         st.success(f"Profile saved to `{PROFILE_PATH.relative_to(REPO_ROOT)}` "
                    "(gitignored). Head to **🚀 Run JobScout**.")
         if "linkedin" in enabled and not linkedin_ack:
@@ -385,16 +411,18 @@ def page_profile() -> None:
 # ---------------------------------------------------------------------------
 
 def _draft_for(package: dict, masker: PIIMasker, skills_profile: str,
-               profile: dict, communication_style: str = "") -> None:
+               profile: dict, communication_style: str = "",
+               voice_profile: str = "") -> None:
     job = package["job"]
     client = st.session_state["client"]
     with st.spinner(f"Drafting application package for {job['title']}…"):
         drafts = drafting_agent.draft_package(client, skills_profile, job,
-                                              package, communication_style)
+                                              package, communication_style,
+                                              voice_profile)
     with st.spinner("Second pass: reviewing the draft for a fresh critique…"):
         review = drafting_agent.review_draft(
             client, skills_profile, job, drafts["cover_letter"],
-            communication_style)
+            communication_style, voice_profile)
         # SECURITY: unmask ONLY here — final local render for human eyes;
         # the unmasked text never goes back through the model.
         drafts["cover_letter"] = masker.unmask(review["revised_cover_letter"])
@@ -406,7 +434,8 @@ def _draft_for(package: dict, masker: PIIMasker, skills_profile: str,
             resume_text = masker.mask(extract_profile_text(profile))
             drafts["cv_pdf_path"] = generate_cv_pdf(
                 client, resume_text, skills_profile, job,
-                profile.get("candidate", {}), masker, CV_OUTPUT_DIR)
+                profile.get("candidate", {}), masker, CV_OUTPUT_DIR,
+                voice_profile)
         except Exception as exc:
             st.warning(f"Cover letter ready, but CV generation failed: {exc}")
     records.upsert(job, drafts=drafts)
@@ -421,7 +450,7 @@ def _decide(job: dict, decision: str) -> None:
 
 def render_package(package: dict, threshold: int, masker: PIIMasker,
                    skills_profile: str, profile: dict,
-                   communication_style: str = "") -> None:
+                   communication_style: str = "", voice_profile: str = "") -> None:
     job = package["job"]
     record = records.get(job["id"]) or {}
     decision = record.get("decision")
@@ -479,7 +508,7 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
             if st.button(f"✍️ Draft cover letter + resume tweaks{hint}",
                          key=f"draft_{job['id']}"):
                 _draft_for(package, masker, skills_profile, profile,
-                          communication_style)
+                          communication_style, voice_profile)
 
         # HITL gate — the human decides; JobScout never submits.
         st.info("🔒 JobScout never submits applications. If you approve, "
@@ -571,6 +600,16 @@ def page_run() -> None:
                 st.session_state["skills_profile"] = scoring_agent.analyze_resume(
                     st.session_state["client"], resume_text, summary)
 
+            if "voice_profile" not in st.session_state:
+                samples_text = masker.mask(extract_writing_samples_text())
+                st.session_state["voice_profile"] = ""
+                if samples_text:
+                    st.write("🎙️ Learning your writing style from uploaded "
+                            "samples (PII-masked)…")
+                    st.session_state["voice_profile"] = \
+                        scoring_agent.extract_voice_profile(
+                            st.session_state["client"], samples_text)
+
             goal = f", stopping early at {int(min_matches)} matches" if min_matches else ""
             st.write(f"⚖️ Scoring up to {len(to_score)} jobs{goal}…")
             bar = st.progress(0.0)
@@ -632,7 +671,7 @@ def page_run() -> None:
     for package in scored:
         render_package(package, threshold, masker,
                        st.session_state.get("skills_profile", ""), profile,
-                       communication_style)
+                       communication_style, st.session_state.get("voice_profile", ""))
 
 
 # ---------------------------------------------------------------------------

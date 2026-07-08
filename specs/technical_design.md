@@ -83,6 +83,17 @@ Five components per the course framework: **model** (Claude API),
    `--max-score` ceiling, until N score ≥ `draft_threshold` or the pool
    (or ceiling) is exhausted — printing a clear warning if the goal isn't
    met rather than silently returning fewer matches than asked for.
+4b. Voice matching (optional, once per session/run): if the candidate
+   has uploaded writing samples to `profile/documents/writing_samples/`,
+   `scoring_agent.extract_voice_profile()` (skill:
+   `skills/voice-matching/SKILL.md`) distills them — masked, same as the
+   resume — into a compact style descriptor (sentence rhythm, formality,
+   vocabulary; explicitly NOT facts or claims, that's resume-analysis's
+   job on a different source). Empty when no samples exist — no LLM call
+   is made in that case. The descriptor is passed to `draft_package`,
+   `review_draft`, and `tailor_cv` and takes priority over the coarser
+   `communication_style` preset when both are set, since a learned voice
+   is strictly more specific than a category label.
 5. Draft: for jobs ≥ threshold → Drafting Agent → cover letter + resume tweaks
 5b. Review: a second, fresh-context call (Drafting Agent's `review_draft`)
    critiques the masked cover letter for unsupported claims, missed
