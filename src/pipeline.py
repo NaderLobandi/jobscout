@@ -17,6 +17,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from .agents import search_agent
+from .liveness import filter_dead_postings
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -35,3 +36,8 @@ def fetch_jobs(profile: dict) -> list[dict]:
                 return await search_agent.search(session, profile)
 
     return asyncio.run(_run())
+
+
+def verify_liveness(jobs: list[dict]) -> tuple[list[dict], int]:
+    """Blocking wrapper around filter_dead_postings() for Streamlit."""
+    return asyncio.run(filter_dead_postings(jobs))

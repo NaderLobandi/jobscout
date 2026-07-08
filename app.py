@@ -31,7 +31,7 @@ from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, extract_all_saved_documents
                         extract_profile_text, list_profile_documents, load_profile)
 from src.memory import Memory
 from src.orchestrator import _relevance_rank, deterministic_filter
-from src.pipeline import fetch_jobs
+from src.pipeline import fetch_jobs, verify_liveness
 from src.records import Records
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -225,6 +225,20 @@ def page_profile() -> None:
             help="Deterministic filter, applied before any LLM call. "
                  "Postings with no stated date are dropped when this is "
                  "set — an unstated date isn't a reliable 'recent enough.'")
+        verify_liveness_pref = st.checkbox(
+            "🔎 Also verify postings are still live with a headless "
+            "browser (Playwright, opt-in)",
+            value=bool(prefs.get("verify_liveness", False)),
+            help="Catches postings that return HTTP 200 but actually say "
+                 "'no longer accepting applications' — something the "
+                 "posting-age filter above can't see. Requires `pip "
+                 "install playwright && playwright install chromium`. "
+                 "Only checked on jobs about to be scored, not every "
+                 "search result, and fails open (never wrongly drops a "
+                 "job it couldn't verify) — but it does load each "
+                 "posting's page in a real browser, which is slower than "
+                 "everything else JobScout does and is a heavier-weight "
+                 "check than a plain API call.")
         c1, c2 = st.columns(2)
         must_haves = c1.text_input("Must-haves (comma-separated, optional)",
                                    ", ".join(prefs.get("must_haves", [])))
@@ -309,6 +323,7 @@ def page_profile() -> None:
                 "remote_preference": remote_pref,
                 "salary_floor_usd": int(salary_floor),
                 "max_posting_age_days": int(max_posting_age) or None,
+                "verify_liveness": bool(verify_liveness_pref),
                 "visa_sponsorship_required": bool(
                     prefs.get("visa_sponsorship_required", False)),
                 "must_haves": _csv(must_haves),
@@ -540,6 +555,13 @@ def page_run() -> None:
             jobs.sort(key=lambda j: _relevance_rank(
                 j, prefs.get("target_roles", [])), reverse=True)
             to_score = jobs[:int(max_score)]
+
+            if prefs.get("verify_liveness"):
+                st.write("🔎 Verifying postings are still live (Playwright)…")
+                to_score, dead_count = verify_liveness(to_score)
+                if dead_count:
+                    st.write(f"Dropped **{dead_count}** posting(s) that "
+                            "appear closed/filled/expired.")
 
             if "skills_profile" not in st.session_state:
                 st.write("🧠 Analyzing your resume + supplementary "

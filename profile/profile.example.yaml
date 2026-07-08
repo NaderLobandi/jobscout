@@ -20,6 +20,13 @@ preferences:
   remote_preference: remote_or_hybrid    # onsite, hybrid, remote_only, any
   salary_floor_usd: 0                    # 0 = ignore salary
   max_posting_age_days: 7                # null/0 = ignore; undated postings dropped when set
+  # ⚠️ Playwright liveness verification: opt-in, off by default. Catches
+  # a posting that returns HTTP 200 but says "no longer accepting
+  # applications" — invisible to the posting-age filter above. Needs
+  # `pip install playwright && playwright install chromium`. Only
+  # checked on jobs about to be scored; fails open (never wrongly drops
+  # a job it couldn't verify).
+  verify_liveness: false
   visa_sponsorship_required: false
   must_haves: []
   dealbreakers: []                       # e.g. ["on-call rotation"]

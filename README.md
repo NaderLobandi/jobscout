@@ -80,6 +80,10 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env
+
+# Optional, only if you want Playwright liveness verification (off by
+# default — see "Liveness Verification" below):
+pip install playwright && playwright install chromium
 ```
 
 Optional: drop your resume at `profile/resume.pdf`. For richer scoring,
@@ -120,10 +124,11 @@ guardrails, and agents):
 - **🚀 Run JobScout** — one click runs search → deterministic filter →
   **archetype tagging** (🏷️ a role-category label — Research, Applied
   ML/MLOps, Agentic/LLM Systems, etc. — from a keyword taxonomy you can
-  customize in `profile.yaml`, no LLM call) → resume analysis → per-job
-  scoring with live progress, with an optional **"stop early once N
-  found"** goal so it keeps scoring more jobs (up to your cost cap)
-  instead of a fixed batch. Each match expands into a
+  customize in `profile.yaml`, no LLM call) → optional **🔎 liveness
+  verification** (Playwright, off by default — see below) → resume
+  analysis → per-job scoring with live progress, with an optional
+  **"stop early once N found"** goal so it keeps scoring more jobs (up to
+  your cost cap) instead of a fixed batch. Each match expands into a
   score-dimension breakdown, a drafted cover letter that's already been
   through a second-pass reviewer critique + resume tweaks, a **tailored,
   ATS-optimized CV PDF** you can download directly, a deterministic
@@ -203,6 +208,14 @@ N days — deterministic, before any LLM call, same category as the
 dealbreaker/employment-type/salary filters. A posting with no stated date
 is dropped too when this is set, on purpose: an unstated date isn't a
 reliable "recent enough."
+
+**Liveness verification (opt-in).** The posting-age filter above can't
+see everything — a page can return HTTP 200 while its own text says "no
+longer accepting applications." Set `preferences.verify_liveness: true`
+(Profile page checkbox, or CLI wizard) to have JobScout render each job
+about to be scored with headless Chromium (Playwright) and check for
+that. See "Liveness Verification" below for the full picture — it's off
+by default and needs an extra install step.
 
 **Running it daily.** JobScout has no built-in scheduler — `--auto` makes
 a run safe to schedule, but starting the schedule itself is a decision
@@ -438,6 +451,38 @@ none of your categories is tagged "Unclassified," which is informative
 in its own right (maybe your taxonomy needs a new category), not an
 error.
 
+## Liveness Verification
+
+Off by default. `preferences.max_posting_age_days` already catches most
+stale postings from their stated date, but some ATS pages keep returning
+HTTP 200 with the original content long after a role has closed — the
+"no longer accepting applications" banner only exists in the rendered
+page, not in any API's `posted_at` field. Turning on
+`preferences.verify_liveness` has JobScout render each job **about to be
+scored** (not the whole search-result set) with headless Chromium and
+check its visible text against a fixed list of generic
+closed/filled/expired phrases (`src/liveness.py`) — no LLM call, no
+site-specific scraping, no clicks or form interaction, just reading text
+off a page whose URL an official API already gave you.
+
+Needs an extra install step most users won't want, which is exactly why
+it's opt-in:
+
+```bash
+pip install playwright && playwright install chromium
+```
+
+Two things worth knowing:
+
+- **It fails open, deliberately.** Any timeout, error, or missing
+  Playwright install is treated as "assume live." The check's only job
+  is to catch postings it can *positively* identify as dead — it must
+  never risk dropping a real one because the check itself broke.
+- **It's slower and heavier than everything else JobScout does.** A
+  page render is not a plain API GET. That's why it's capped to jobs
+  already selected for scoring (bounded by `--max-score`), not run
+  against every search result.
+
 ## Contact Discovery
 
 An optional, per-posting **"🔍 Find contacts"** button (Run and History
@@ -533,7 +578,8 @@ mcp-server/                  MCP server + normalized schema + 11 adapters
 src/                         orchestrator, sub-agents, guardrails, memory,
                              intake, pipeline (UI helpers), records (history),
                              cv_render (ATS PDF layout), cv_pipeline (glue),
-                             contacts (Hunter.io lookup), archetype (role tags)
+                             contacts (Hunter.io lookup), archetype (role tags),
+                             liveness (opt-in Playwright dead-posting check)
 app.py                       Streamlit UI (profile / run / history)
 profile/profile.example.yaml committed template (real profile is gitignored)
 profile/documents/           optional supplementary docs (gitignored except README)

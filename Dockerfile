@@ -9,6 +9,12 @@
 #           jobscout
 #
 # Secrets come in via --env-file at runtime — nothing is baked into the image.
+#
+# Playwright liveness verification (preferences.verify_liveness) is
+# opt-in and deliberately NOT included in this image — Chromium adds
+# ~300MB and a pile of system libs, and most users won't turn this
+# feature on. To enable it in Docker, add after the pip install line:
+#   RUN pip install playwright && playwright install --with-deps chromium
 
 FROM python:3.12-slim
 

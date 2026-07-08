@@ -135,6 +135,15 @@ def run_wizard() -> dict:
     salary_floor = int(Prompt.ask("Salary floor USD (0 = ignore)", default="0"))
     max_posting_age = int(Prompt.ask(
         "Only show postings from the last N days (0 = ignore)", default="0"))
+    console.print(
+        "\n[yellow]🔎 Optional: verify postings are still live with a "
+        "headless browser (Playwright) before scoring them — catches a "
+        "posting that returns HTTP 200 but actually says 'no longer "
+        "accepting applications'. Requires `pip install playwright && "
+        "playwright install chromium`. Slower than everything else "
+        "JobScout does; only checked on jobs about to be scored.[/yellow]")
+    verify_liveness_pref = Confirm.ask(
+        "Enable Playwright liveness verification?", default=False)
     visa = Confirm.ask("Do you require visa sponsorship?", default=False)
     must_haves = _ask_list("Must-haves (comma-separated, optional)", "")
     dealbreakers = _ask_list("Dealbreakers (comma-separated, optional)", "")
@@ -163,6 +172,7 @@ def run_wizard() -> dict:
             "remote_preference": remote_pref,
             "salary_floor_usd": salary_floor,
             "max_posting_age_days": max_posting_age or None,
+            "verify_liveness": verify_liveness_pref,
             "visa_sponsorship_required": visa,
             "must_haves": must_haves,
             "dealbreakers": dealbreakers,

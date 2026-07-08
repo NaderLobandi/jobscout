@@ -9,3 +9,10 @@ python-dotenv>=1.0
 pytest>=8.0
 streamlit>=1.38
 pandas>=2.0
+
+# Optional, opt-in only (preferences.verify_liveness in profile.yaml):
+# Playwright-based posting liveness verification. Not installed by
+# default — most users won't need it, and it needs a separate browser
+# binary download beyond pip install. To enable:
+#   pip install playwright && playwright install chromium
+# playwright>=1.40

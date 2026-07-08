@@ -61,6 +61,21 @@ Five components per the course framework: **model** (Claude API),
    automatically (`Records.upsert()` always persists the whole job
    dict) — no separate storage field needed. Surfaced as a tag on every
    job card and as a filter dimension in the Streamlit History page.
+3c. Liveness verification (opt-in, off by default): `src/liveness.py`
+   augments the recency filter for the specific failure mode
+   `posting_is_recent()` can't see — a posting whose page returns HTTP
+   200 but says "no longer accepting applications"/"position filled"/
+   etc., which only shows up in the rendered page, not the API's
+   `posted_at` field. Runs on `to_score` only (after the relevance sort
+   and `--max-score` cap), never the full search-result set, so
+   Playwright cost scales with the LLM scoring budget, not the whole
+   pool. ONE headless Chromium instance per run, one page-load per job,
+   closed after each check. Text-pattern matching only (a fixed list of
+   generic "closed/filled/expired" phrases) — no site-specific
+   scraping, no clicks, no form interaction. Fails OPEN on any
+   error/timeout/missing-Playwright-install: a job is only ever dropped
+   when a dead-posting phrase was positively found, never because the
+   check itself failed. CLAUDE.md constraint 4 exception.
 4. Score: Scoring Agent per job (masked resume + prefs) → weighted score,
    per-dimension breakdown, rationale (structured output, JSON schema).
    `--min-matches N` (CLI) turns the fixed-batch scoring pass into a

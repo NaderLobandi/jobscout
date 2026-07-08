@@ -37,6 +37,7 @@ from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
                          posting_is_recent, violates_dealbreakers)
 from .intake import extract_profile_text, load_profile, run_wizard
 from .keyword_coverage import keyword_coverage
+from .liveness import filter_dead_postings
 from .memory import Memory
 from .records import Records
 
@@ -174,6 +175,15 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
              reverse=True)
     threshold = profile.get("draft_threshold", 70)
     to_score = jobs[:max_score]
+
+    if prefs.get("verify_liveness"):
+        console.print("[cyan]🔎 Verifying postings are still live "
+                      "(Playwright)…[/cyan]")
+        to_score, dead_count = await filter_dead_postings(to_score)
+        if dead_count:
+            console.print(f"[dim]Dropped {dead_count} posting(s) that "
+                          "appear closed/filled/expired.[/dim]")
+
     goal = (f", stopping early once {min_matches} score ≥ {threshold:.0f}"
             if min_matches else "")
     console.print(f"[bold cyan]⚖️  Scoring up to {len(to_score)} jobs{goal}…"

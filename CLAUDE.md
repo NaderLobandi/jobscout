@@ -52,5 +52,19 @@ human approval gate. It never auto-submits applications.
    in the profile; never uses login credentials or cookies; GET-only;
    strictly capped request volume with delays between requests; backs off
    permanently for the run on any rate-limit response.
+   **A second user-authorized exception (2026-07): Playwright liveness
+   verification.** Headless-browser rendering of a job posting's OWN URL
+   (already obtained from an official API result — never used to
+   discover new postings or extract data beyond a live/dead signal) to
+   catch postings that return HTTP 200 but are actually closed/filled —
+   something a plain GET can't see on JS-heavy ATS pages. Off by
+   default; requires an explicit opt-in flag in the profile. Bounded
+   cost: only checked on jobs already selected for scoring (≤
+   `--max-score`), never the full search-result set. Read-only — loads
+   the page and reads visible text only; no clicks, no form
+   interaction, no login. Fails OPEN: any error, timeout, or missing
+   Playwright install is treated as "assume live," since a liveness
+   check's job is to catch positively-identified dead postings, never
+   to risk wrongly dropping a real one.
 5. Dealbreaker/threshold filtering is deterministic Python, never LLM
    judgment, so it cannot be prompt-injected by job-posting text.
