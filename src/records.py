@@ -30,9 +30,13 @@ class Records:
                 self._entries = []  # corrupted -> start fresh, don't crash
 
     def upsert(self, job: dict, scoring: dict | None = None,
-               drafts: dict | None = None, decision: str | None = None) -> None:
-        """One record per job id; scoring/drafts/decision fill in as the
-        pipeline progresses. Re-upserting updates the existing record."""
+               drafts: dict | None = None, decision: str | None = None,
+               contacts: list[dict] | None = None) -> None:
+        """One record per job id; scoring/drafts/decision/contacts fill in
+        as the pipeline progresses. Re-upserting updates the existing
+        record. contacts=[] (searched, found nothing) is distinct from
+        contacts=None (never searched) — both are valid, meaningfully
+        different states."""
         entry = self._find(job["id"])
         if entry is None:
             entry = {"job": job, "first_seen": _now()}
@@ -53,6 +57,8 @@ class Records:
         if decision is not None:
             entry["decision"] = decision
             entry["decided_at"] = _now()
+        if contacts is not None:
+            entry["contacts"] = contacts
         self._save()
 
     def get(self, job_id: str) -> dict | None:

@@ -30,6 +30,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .agents import scoring_agent, drafting_agent, search_agent
+from .contacts import find_contacts
 from .cv_pipeline import generate_cv_pdf
 from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
                          posting_is_recent, violates_dealbreakers)
@@ -105,7 +106,7 @@ def deterministic_filter(jobs: list[dict], profile: dict, memory: Memory) -> lis
 
 
 async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
-              auto: bool = False) -> None:
+              auto: bool = False, find_contacts_flag: bool = False) -> None:
     load_dotenv(REPO_ROOT / ".env")
 
     # ---- 1. Intake ------------------------------------------------------
@@ -228,13 +229,22 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
                 console.print(f"[red]drafting failed: {exc}[/red]")
                 draft_ok = False
 
+            if find_contacts_flag:
+                # Independent of draft success — this is about the
+                # COMPANY, not the letter. find_contacts() already
+                # swallows its own failures and returns [], so no
+                # try/except needed here.
+                console.print(f"[cyan]🔍 Looking up contacts at "
+                              f"{job['company']} via Hunter.io…[/cyan]")
+                package["contacts"] = find_contacts(job["company"], job["title"])
+
             if auto:
                 # No interactive prompt in an unattended run — HITL still
                 # applies, it's just deferred: save the scored/drafted
                 # package with NO decision, exactly like the Streamlit UI
                 # would before you click Approve/Reject/Skip. JobScout
                 # still has no code path that submits anything.
-                records.upsert(job, drafts=package)
+                records.upsert(job, drafts=package, contacts=package.get("contacts"))
                 if draft_ok:
                     console.print(
                         f"[green]✓ saved for review: {job['title']} "
@@ -311,8 +321,14 @@ def main() -> None:
                              ".jobscout_records.json with NO decision — "
                              "review and Approve/Reject/Skip later in the "
                              "Streamlit UI. Nothing is ever auto-approved.")
+    parser.add_argument("--find-contacts", action="store_true",
+                        help="look up recruiter/HR contacts at each "
+                             "matched job's company via Hunter.io "
+                             "(requires HUNTER_API_KEY). Display-only — "
+                             "JobScout never contacts anyone itself.")
     args = parser.parse_args()
-    asyncio.run(run(args.max_score, args.dry_run, args.min_matches, args.auto))
+    asyncio.run(run(args.max_score, args.dry_run, args.min_matches, args.auto,
+                    args.find_contacts))
 
 
 if __name__ == "__main__":

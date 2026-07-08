@@ -28,6 +28,19 @@ human approval gate. It never auto-submits applications.
    `src/guardrails.py` is a hard stop.
 2. PII (name, email, phone, address) is masked before ANY LLM call and
    reinjected only at final local render.
+   **One user-authorized exception (2026-07): Contact Discovery.** This
+   is the only feature that fetches and stores a THIRD PARTY's personal
+   data (a recruiter/HR contact's name, title, work email) rather than
+   the user's own. The owner explicitly chose this, on a per-posting,
+   opt-in basis. Mitigations are mandatory and must not be weakened:
+   disabled by default (requires `HUNTER_API_KEY`); sourced from a
+   single official, keyed, GET-only API (Hunter.io) — never a scraper;
+   no LLM call at any point in the lookup (Hunter's data is already
+   real and sourced, so there is nothing for a model to add except
+   hallucination risk); every contact shown carries Hunter's own source
+   citation; JobScout only ever *displays* a contact for the human to
+   reach out to themselves — there is no code path that messages,
+   emails, or contacts anyone on the user's behalf.
 3. The MCP server is read-only against job APIs. No write operations.
 4. No scrapers. Only official/public JSON APIs (Indeed/Glassdoor are
    deliberately excluded — their ToS prohibit scraping).

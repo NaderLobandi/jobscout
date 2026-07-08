@@ -99,6 +99,19 @@ Five components per the course framework: **model** (Claude API),
    link per job. Insights Agent's `suggest_focus` turns the aggregate for
    the worst dimension into a short, evidence-grounded suggestion —
    spends a token only when the user explicitly asks for it.
+9. Contact Discovery (on demand, per posting, opt-in): `src/contacts.py`
+   queries Hunter.io's Domain Search API for a company and returns
+   recruiter/HR-adjacent contacts (name, title, email, Hunter's own
+   confidence score, source citation URLs). **No LLM call** — Hunter's
+   data is already real and sourced, so a model has nothing to add
+   except hallucination risk. Ranking is deterministic: hiring-adjacent
+   titles/departments (recruiter, talent, HR, people ops) first, then
+   title-overlap with the posting's own role, then Hunter's confidence
+   score. Off unless `HUNTER_API_KEY` is set. Results are stored in
+   Records (`contacts` field) alongside the job — the one place JobScout
+   persists a THIRD PARTY's personal data, not the user's own (CLAUDE.md
+   constraint 2 exception). JobScout only displays a contact; there is
+   no code path that emails, messages, or otherwise contacts anyone.
 
 ## 3. Data contracts
 
@@ -171,6 +184,11 @@ The weighted total is computed in **deterministic Python** from
    matching, not LLM judgment → not prompt-injectable.
 7. **Untrusted input** — job descriptions are wrapped in delimiters and the
    scoring/drafting prompts instruct the model to ignore embedded instructions.
+8. **Third-party PII is display-only** — Contact Discovery (§2 step 9) is
+   the sole feature that stores someone else's personal data. It's
+   opt-in (requires `HUNTER_API_KEY`), sourced from one official keyed
+   API (never a scraper), and JobScout never messages a discovered
+   contact — displaying it for the human is the entire feature.
 
 ## 5. Sources
 

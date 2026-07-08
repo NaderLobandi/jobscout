@@ -210,6 +210,19 @@ def hitl_gate(package: dict) -> str:
                f"[yellow]⚠️  Missing:[/yellow] {', '.join(kw['missing']) or '—'}")
         console.print(Panel(body, title="🔑 Keyword coverage vs. the posting",
                             border_style="cyan"))
+    contacts = package.get("contacts")
+    if contacts:
+        lines = [f"  • {c.get('name') or '(name unknown)'}"
+                f"{' — ' + c['position'] if c.get('position') else ''}"
+                f" · {c['email']}" for c in contacts]
+        console.print(Panel(
+            "\n".join(lines) +
+            "\n\n[dim]via Hunter.io — verify before reaching out. "
+            "JobScout never contacts anyone on its own.[/dim]",
+            title="📇 Contacts found", border_style="cyan"))
+    elif contacts is not None:
+        console.print("[dim]📇 No contacts found for this company via "
+                      "Hunter.io.[/dim]")
 
     console.print(
         "[yellow]JobScout never submits applications. "

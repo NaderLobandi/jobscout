@@ -125,8 +125,10 @@ guardrails, and agents):
   through a second-pass reviewer critique + resume tweaks, a **tailored,
   ATS-optimized CV PDF** you can download directly, a deterministic
   **keyword-coverage check** against the posting (no LLM call — which of
-  the posting's own key terms actually made it into the letter), and
-  **Approve / Reject / Skip** buttons — the HITL gate as a UI.
+  the posting's own key terms actually made it into the letter), an
+  optional **"🔍 Find contacts"** button (recruiter/HR lookup via
+  Hunter.io, see below), and **Approve / Reject / Skip** buttons — the
+  HITL gate as a UI.
 - **📚 History** — every job ever scored, with scores, decisions, the date
   you decided, the origin **publisher** for aggregator sources (e.g.
   `jsearch (Glassdoor)`), and saved cover letters (`.jobscout_records.json`,
@@ -161,6 +163,10 @@ python -m src.orchestrator --min-matches 5 --max-score 40
 # run. Nothing is ever auto-approved; this only defers the human gate,
 # it does not remove it.
 python -m src.orchestrator --auto --min-matches 5 --max-score 40
+
+# Also look up recruiter/HR contacts at each match's company (requires
+# HUNTER_API_KEY; display-only, JobScout never contacts anyone itself):
+python -m src.orchestrator --find-contacts
 ```
 
 A full run: searches all enabled boards concurrently via MCP → drops
@@ -412,6 +418,33 @@ None of that changes what it is: automated access that LinkedIn's terms
 prohibit. If that trade-off isn't acceptable to you, leave it off — every
 other source is unaffected.
 
+## Contact Discovery
+
+An optional, per-posting **"🔍 Find contacts"** button (Run and History
+pages) or `--find-contacts` (CLI) looks up recruiter/HR contacts at a
+job's company via [Hunter.io](https://hunter.io)'s Domain Search API —
+name, title, work email, Hunter's own confidence score, and source
+citation links. Off by default; requires a free `HUNTER_API_KEY`.
+
+This is different from every other integration in this README in one
+specific way: it's the only feature that stores **someone else's**
+personal data rather than yours. Everything else about it stays
+consistent with JobScout's security posture:
+
+- **One official, keyed, GET-only API** — not a scraper, not LinkedIn
+  people-search (a categorically different, and much riskier, ToS
+  violation than the jobs guest endpoint JobScout already uses).
+- **No LLM call anywhere in the lookup.** Hunter's data is already real
+  and sourced — a model has nothing to add except hallucination risk.
+  Ranking (hiring-adjacent titles first, then role overlap, then
+  Hunter's confidence score) is deterministic Python.
+- **Display-only.** JobScout shows you a contact with its source; it
+  never emails, messages, or reaches out to anyone on its own — the
+  same no-auto-action principle as the HITL gate, just applied to
+  outreach instead of applications.
+- Every contact carries its **source citation** so you can verify it
+  yourself before reaching out.
+
 ## Deployment / path to production
 
 Local container (works today):
@@ -462,6 +495,13 @@ Path to production:
   the renderer, but it means it won't look like a designed resume
   template. It's still worth a skim before you send it, same as the
   cover letter.
+- **Contact Discovery's relevance ranking is a heuristic, not a
+  verified org chart.** It surfaces the most hiring-adjacent-looking
+  title Hunter.io has on file for that company, not necessarily the
+  actual recruiter for that specific posting. Hunter's free tier is
+  also rate-limited (a handful of searches/month), so it's built to
+  degrade to "no contacts found" rather than error, not to be your
+  primary search method.
 
 ## Repo map
 
@@ -472,7 +512,8 @@ skills/                      6 Agent Skills (progressive disclosure)
 mcp-server/                  MCP server + normalized schema + 11 adapters
 src/                         orchestrator, sub-agents, guardrails, memory,
                              intake, pipeline (UI helpers), records (history),
-                             cv_render (ATS PDF layout), cv_pipeline (glue)
+                             cv_render (ATS PDF layout), cv_pipeline (glue),
+                             contacts (Hunter.io lookup)
 app.py                       Streamlit UI (profile / run / history)
 profile/profile.example.yaml committed template (real profile is gitignored)
 profile/documents/           optional supplementary docs (gitignored except README)

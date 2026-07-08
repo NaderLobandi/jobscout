@@ -20,6 +20,8 @@ import yaml
 from dotenv import load_dotenv
 
 from src.agents import MODEL, drafting_agent, insights_agent, scoring_agent
+from src.contacts import find_contacts
+from src.contacts import available as hunter_available
 from src.cv_pipeline import generate_cv_pdf
 from src.guardrails import PIIMasker
 from src.insights import aggregate_dimension_gaps
@@ -81,6 +83,41 @@ def _cv_download_button(job: dict, record: dict, key: str) -> None:
     file_name = f"CV_{job.get('company', 'role')}.pdf".replace(" ", "_")
     st.download_button("📎 Download tailored ATS CV (PDF)", data=pdf_bytes,
                        file_name=file_name, mime="application/pdf", key=key)
+
+
+def _contacts_section(job: dict, record: dict, key: str) -> None:
+    """Recruiter/HR contact lookup via Hunter.io — third-party PII, so
+    opt-in (HUNTER_API_KEY) and display-only: JobScout never messages
+    anyone. contacts=[] (searched, found nothing) is shown distinctly
+    from never having searched at all."""
+    if not hunter_available():
+        return
+    if "contacts" in record:
+        contacts = record["contacts"]
+        if not contacts:
+            st.caption("📇 No contacts found for this company via Hunter.io.")
+            return
+        st.markdown("**📇 Contacts found** (via Hunter.io — verify before reaching out)")
+        for c in contacts:
+            label = c.get("name") or "(name unknown)"
+            role = f" — {c['position']}" if c.get("position") else ""
+            conf = f" · confidence {c['confidence']}%" if c.get("confidence") else ""
+            st.caption(f"{label}{role} · {c['email']}{conf}")
+            links = []
+            if c.get("linkedin"):
+                links.append(f"[LinkedIn]({c['linkedin']})")
+            links += [f"[source]({s})" for s in c.get("sources", [])]
+            if links:
+                st.caption(" · ".join(links))
+        return
+    if st.button("🔍 Find contacts", key=key,
+                 help="Looks up recruiter/HR contacts at this company via "
+                      "Hunter.io. Shown for you to reach out to yourself — "
+                      "JobScout never contacts anyone on its own."):
+        with st.spinner("Searching Hunter.io for recruiter/HR contacts…"):
+            found = find_contacts(job.get("company", ""), job.get("title", ""))
+        records.upsert(job, contacts=found)
+        st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -396,6 +433,8 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
         st.markdown(f"*{package['summary']}*")
         st.divider()
 
+        _contacts_section(job, record, key=f"contacts_{job['id']}")
+
         # Draft package (auto-suggested above threshold; on-demand below)
         if record.get("cover_letter"):
             st.text_area("✉️ Cover letter (edit before sending)",
@@ -643,6 +682,8 @@ def render_history_entry(e: dict) -> None:
                                 f"  ·  {d['reason']}")
         if e.get("summary"):
             st.markdown(f"*{e['summary']}*")
+
+        _contacts_section(job, e, key=f"hist_contacts_{job['id']}")
 
         if e.get("cover_letter"):
             st.divider()
