@@ -24,7 +24,7 @@ from src.archetype import guess_archetype
 from src.contacts import find_contacts
 from src.contacts import available as hunter_available
 from src.cv_pipeline import generate_cv_pdf
-from src.guardrails import PIIMasker
+from src.guardrails import PIIMasker, legitimacy_check
 from src.insights import aggregate_dimension_gaps
 from src.keyword_coverage import keyword_coverage
 from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, WRITING_SAMPLES_DIR,
@@ -61,6 +61,31 @@ def _csv(text: str) -> list[str]:
 def score_badge(score: float, threshold: int) -> str:
     dot = "🟢" if score >= threshold else ("🟡" if score >= 50 else "🔴")
     return f"{dot} {score:.0f}"
+
+
+_LEGITIMACY_ICON = {"suspicious": "🚩", "caution": "⚠️"}
+
+
+def _legitimacy_tag(job: dict) -> str:
+    """Icon for the card label — silent for high_confidence so the common
+    case doesn't clutter every label with a checkmark."""
+    tier = (job.get("legitimacy") or {}).get("tier")
+    icon = _LEGITIMACY_ICON.get(tier)
+    return f"{icon} {tier}  " if icon else ""
+
+
+def _legitimacy_section(job: dict) -> None:
+    """Block G detail: only rendered when there's actually something to
+    say — high_confidence (the common case) shows nothing here at all."""
+    legitimacy = job.get("legitimacy") or {}
+    tier = legitimacy.get("tier")
+    if tier not in ("caution", "suspicious"):
+        return
+    icon = _LEGITIMACY_ICON.get(tier, "")
+    box = st.error if tier == "suspicious" else st.warning
+    reasons = "\n".join(f"- {r}" for r in legitimacy.get("reasons", []))
+    box(f"{icon} **Legitimacy check: {tier}** — a heuristic, not "
+       f"certainty; use your own judgment.\n{reasons}")
 
 
 def _source_label(job: dict) -> str:
@@ -258,6 +283,17 @@ def page_profile() -> None:
                  "posting's page in a real browser, which is slower than "
                  "everything else JobScout does and is a heavier-weight "
                  "check than a plain API call.")
+        drop_suspicious_pref = st.checkbox(
+            "🚩 Auto-drop postings flagged 'suspicious' by the ghost-job/"
+            "scam check (Block G)",
+            value=bool(prefs.get("drop_suspicious_postings", False)),
+            help="Off by default: flagged postings are shown with a badge "
+                 "and their reasons, not hidden, since it's a heuristic "
+                 "that can misfire — better to let you judge one flagged "
+                 "posting than silently remove a real job. Turn this on "
+                 "only if you'd rather never see 'suspicious'-tier "
+                 "postings at all. 'Caution'-tier postings are always "
+                 "shown regardless.")
         c1, c2 = st.columns(2)
         must_haves = c1.text_input("Must-haves (comma-separated, optional)",
                                    ", ".join(prefs.get("must_haves", [])))
@@ -343,6 +379,7 @@ def page_profile() -> None:
                 "salary_floor_usd": int(salary_floor),
                 "max_posting_age_days": int(max_posting_age) or None,
                 "verify_liveness": bool(verify_liveness_pref),
+                "drop_suspicious_postings": bool(drop_suspicious_pref),
                 "visa_sponsorship_required": bool(
                     prefs.get("visa_sponsorship_required", False)),
                 "must_haves": _csv(must_haves),
@@ -457,10 +494,12 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
     badge = {"approved": "✅ approved", "rejected": "❌ rejected",
              "skipped": "⏭ skipped"}.get(decision, "")
     tag = f"🏷️ {job['archetype']}  " if job.get("archetype") else ""
+    legitimacy_tag = _legitimacy_tag(job)
     label = (f"{score_badge(package['score'], threshold)} — "
-             f"**{job['title']}** @ {job['company']}  {tag}{badge}")
+             f"**{job['title']}** @ {job['company']}  {tag}{legitimacy_tag}{badge}")
 
     with st.expander(label, expanded=package["score"] >= threshold and not decision):
+        _legitimacy_section(job)
         meta, dims = st.columns([1, 2])
         with meta:
             st.markdown(f"**{job['company']}**")
@@ -577,9 +616,27 @@ def page_run() -> None:
                 return
 
             archetypes_config = profile.get("archetypes")
+            past_entries = records.all()
             for job in jobs:
                 job["archetype"] = guess_archetype(
                     f"{job['title']} {job['description']}", archetypes_config)
+                job["legitimacy"] = legitimacy_check(job, past_entries)
+
+            if prefs.get("drop_suspicious_postings"):
+                before = len(jobs)
+                jobs = [j for j in jobs
+                       if j["legitimacy"]["tier"] != "suspicious"]
+                if before - len(jobs):
+                    st.write(f"Dropped **{before - len(jobs)}** posting(s) "
+                            "flagged suspicious (Block G legitimacy check).")
+                if not jobs:
+                    status.update(label="Nothing left after the legitimacy "
+                                  "filter", state="complete")
+                    st.session_state["scored"] = []
+                    st.warning("Nothing left after the legitimacy filter — "
+                              "try disabling it on the Profile page to "
+                              "review flagged postings yourself.")
+                    return
 
             jobs.sort(key=lambda j: _relevance_rank(
                 j, prefs.get("target_roles", [])), reverse=True)
@@ -731,8 +788,10 @@ def render_history_entry(e: dict) -> None:
              "skipped": "⏭ skipped"}.get(decision, "🕓 undecided")
     score_label = f"{score:.0f}/100" if score is not None else "—"
     tag = f"🏷️ {job['archetype']}  " if job.get("archetype") else ""
+    legitimacy_tag = _legitimacy_tag(job)
     with st.expander(f"{score_label} — **{job['title']}** @ "
-                     f"{job['company']}  {tag}{badge}"):
+                     f"{job['company']}  {tag}{legitimacy_tag}{badge}"):
+        _legitimacy_section(job)
         meta, dims = st.columns([1, 2])
         with meta:
             st.caption(f"{job.get('location') or '—'} · "
@@ -802,6 +861,8 @@ def page_history() -> None:
         "title": e["job"]["title"],
         "company": e["job"]["company"],
         "archetype": e["job"].get("archetype") or "Unclassified",
+        "legitimacy": (e["job"].get("legitimacy") or {}).get(
+            "tier", "high_confidence"),
         "location": e["job"].get("location", ""),
         "source": e["job"].get("source", ""),
         "publisher": e["job"].get("publisher") or "",
@@ -821,6 +882,10 @@ def page_history() -> None:
             "archetype": st.column_config.TextColumn(
                 "archetype", help="Deterministic role-category tag from "
                 "your profile.yaml `archetypes` (or the built-in default)"),
+            "legitimacy": st.column_config.TextColumn(
+                "legitimacy", help="Block G ghost-job/scam heuristic — "
+                "high_confidence / caution / suspicious. A heuristic, "
+                "not certainty."),
         })
 
     archetypes_present = sorted(

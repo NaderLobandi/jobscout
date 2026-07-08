@@ -34,7 +34,8 @@ from .archetype import guess_archetype
 from .contacts import find_contacts
 from .cv_pipeline import generate_cv_pdf
 from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
-                         posting_is_recent, violates_dealbreakers)
+                         legitimacy_check, posting_is_recent,
+                         violates_dealbreakers)
 from .intake import (extract_profile_text, extract_writing_samples_text,
                      load_profile, run_wizard)
 from .keyword_coverage import keyword_coverage
@@ -127,6 +128,7 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
     )
     memory = Memory()
     records = Records() if auto else None
+    past_entries = (records or Records()).all()
 
     # ---- 2. Search via MCP ----------------------------------------------
     console.print("[bold cyan]🔎 Searching job boards via MCP…[/bold cyan]")
@@ -147,13 +149,27 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
                       "profile keywords or clearing .jobscout_memory.json[/yellow]")
         return
 
-    # Archetype tag: deterministic, cheap enough for every surviving job
-    # (not just scored ones) — the user's own taxonomy from profile.yaml
-    # (`archetypes`), or a sensible default if that key is absent.
+    # Archetype tag + Block G legitimacy check: both deterministic, both
+    # cheap enough for every surviving job (not just scored ones).
     archetypes_config = profile.get("archetypes")
+    prefs = profile.get("preferences", {})
     for job in jobs:
         job["archetype"] = guess_archetype(
             f"{job['title']} {job['description']}", archetypes_config)
+        job["legitimacy"] = legitimacy_check(job, past_entries)
+
+    if prefs.get("drop_suspicious_postings"):
+        before = len(jobs)
+        jobs = [j for j in jobs if j["legitimacy"]["tier"] != "suspicious"]
+        if before - len(jobs):
+            console.print(f"[dim]Dropped {before - len(jobs)} posting(s) "
+                          "flagged suspicious (Block G legitimacy "
+                          "check).[/dim]")
+        if not jobs:
+            console.print("[yellow]Nothing left after the legitimacy "
+                          "filter — try disabling drop_suspicious_postings "
+                          "to review flagged postings yourself.[/yellow]")
+            return
 
     if dry_run:
         _print_table(jobs[:20])
@@ -175,7 +191,6 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
                       "uploaded samples (PII-masked)…[/bold cyan]")
         voice_profile = scoring_agent.extract_voice_profile(client, samples_text)
 
-    prefs = profile.get("preferences", {})
     weights = profile.get("weights", {})
     # Rank by title relevance before capping — the scoring budget should go
     # to the jobs most likely to matter, not whatever order dedupe produced.
@@ -323,6 +338,9 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
         )
 
 
+_LEGITIMACY_ICON = {"high_confidence": "✅", "caution": "⚠️", "suspicious": "🚩"}
+
+
 def _print_table(jobs: list[dict]) -> None:
     table = Table(title="Filtered jobs (dry run)")
     table.add_column("Title", max_width=40)
@@ -330,9 +348,13 @@ def _print_table(jobs: list[dict]) -> None:
     table.add_column("Loc", max_width=20)
     table.add_column("Source")
     table.add_column("Archetype")
+    table.add_column("Legitimacy")
     for j in jobs:
+        legitimacy = j.get("legitimacy") or {}
+        tier = legitimacy.get("tier", "high_confidence")
         table.add_row(j["title"], j["company"], j["location"], j["source"],
-                      j.get("archetype") or "—")
+                      j.get("archetype") or "—",
+                      f"{_LEGITIMACY_ICON.get(tier, '')} {tier}")
     console.print(table)
 
 

@@ -160,6 +160,108 @@ def posting_is_recent(posted_at: str | None, max_age_days: int | None) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Legitimacy check ("Block G" — ghost-job / scam heuristic)
+# ---------------------------------------------------------------------------
+
+# Common scam-posting tells — plain substring matching, same discipline as
+# violates_dealbreakers(): a job posting's own text cannot talk its way
+# past this, unlike an LLM judge it might try to prompt-inject.
+_SCAM_PHRASES = (
+    "wire transfer", "send your bank details", "processing fee",
+    "purchase your own equipment", "telegram only", "whatsapp only",
+    "no interview necessary", "hiring immediately no experience",
+    "gift card", "western union", "cash app", "reship packages",
+    "personal check will be provided",
+)
+_CONTRACTOR_RISK_PHRASES = ("1099", "independent contractor", "self-employed")
+_NO_BENEFITS_PHRASES = ("no benefits", "no pto", "no paid time off")
+_VAGUE_SALARY_PHRASES = ("competitive salary",
+                         "compensation commensurate with experience")
+_JUNIOR_TITLE_WORDS = ("entry level", "entry-level", "junior", "intern")
+_SENIOR_EXPERIENCE_RE = re.compile(r"(\d+)\+?\s*years?\s+(?:of\s+)?experience")
+
+
+def _count_reposts(job: dict, past_entries: list[dict]) -> int:
+    """How many DISTINCT past Records entries share this job's normalized
+    (title, company) — a role that keeps reappearing under a new URL/id
+    across separate search runs is the classic ghost-job recycling
+    pattern. Relies on Records already being one entry per unique job id
+    (make_job_id hashes the URL), so this needs no date-gap math: a
+    second entry with the same (title, company) can only exist if it
+    arrived from a genuinely different posting."""
+    key = (job.get("title", "").strip().lower(),
+          job.get("company", "").strip().lower())
+    return sum(
+        1 for e in past_entries
+        if e["job"]["id"] != job["id"]
+        and (e["job"].get("title", "").strip().lower(),
+             e["job"].get("company", "").strip().lower()) == key
+    )
+
+
+def legitimacy_check(job: dict, past_entries: list[dict] | None = None) -> dict:
+    """Block G: deterministic ghost-job/scam heuristic, no LLM call —
+    every signal here is real, sourced data already in the posting or
+    already in Records, not a judgment call an LLM could be talked out
+    of. Returns {"tier": "high_confidence"|"caution"|"suspicious",
+    "reasons": [...]}. Badge-only by default (see
+    preferences.drop_suspicious_postings for the opt-in hard filter) —
+    a heuristic that occasionally misfires should warn, not silently
+    remove a real job from view."""
+    title = job.get("title", "") or ""
+    description = job.get("description", "") or ""
+    text = f"{title} {description}".lower()
+    reasons: list[str] = []
+    score = 0
+
+    for phrase in _SCAM_PHRASES:
+        if phrase in text:
+            reasons.append(f'contains a common scam-posting phrase: "{phrase}"')
+            score += 4  # a single scam-tell alone should read as suspicious,
+            break        # not just caution — don't stack near-duplicate hits
+
+    if (any(p in text for p in _CONTRACTOR_RISK_PHRASES)
+            and any(p in text for p in _NO_BENEFITS_PHRASES)):
+        reasons.append("contractor language paired with no-benefits "
+                       "language — verify employment classification "
+                       "before applying")
+        score += 1
+
+    if any(w in title.lower() for w in _JUNIOR_TITLE_WORDS):
+        m = _SENIOR_EXPERIENCE_RE.search(text)
+        if m and int(m.group(1)) >= 5:
+            reasons.append(f"titled entry-level/junior/intern but asks for "
+                           f"{m.group(1)}+ years of experience")
+            score += 2
+
+    if len(description.strip()) < 100:
+        reasons.append("description is very short — hard to verify what "
+                       "the role actually involves")
+        score += 1
+
+    if (any(p in text for p in _VAGUE_SALARY_PHRASES)
+            and not job.get("salary_min") and not job.get("salary_max")):
+        reasons.append("generic salary language with no stated range")
+        score += 1
+
+    if past_entries:
+        reposts = _count_reposts(job, past_entries)
+        if reposts >= 2:
+            reasons.append(f"same title+company seen {reposts + 1} times "
+                           "across past runs — possible recurring/ghost "
+                           "listing")
+            score += 2
+
+    if score >= 4:
+        tier = "suspicious"
+    elif score >= 1:
+        tier = "caution"
+    else:
+        tier = "high_confidence"
+    return {"tier": tier, "reasons": reasons, "score": score}
+
+
+# ---------------------------------------------------------------------------
 # HITL gate
 # ---------------------------------------------------------------------------
 
@@ -187,6 +289,13 @@ def hitl_gate(package: dict) -> str:
         title="🎯 Match — human review required",
         border_style="green",
     ))
+    legitimacy = job.get("legitimacy")
+    if legitimacy and legitimacy["tier"] != "high_confidence":
+        icon = "🚩" if legitimacy["tier"] == "suspicious" else "⚠️"
+        body = "\n".join(f"  • {r}" for r in legitimacy["reasons"])
+        console.print(Panel(
+            body, title=f"{icon} Legitimacy check: {legitimacy['tier']}",
+            border_style="red" if legitimacy["tier"] == "suspicious" else "yellow"))
     if package.get("cover_letter"):
         console.print(Panel(package["cover_letter"],
                             title="✉️  Draft cover letter", border_style="blue"))

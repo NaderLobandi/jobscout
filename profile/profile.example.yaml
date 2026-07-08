@@ -27,6 +27,11 @@ preferences:
   # checked on jobs about to be scored; fails open (never wrongly drops
   # a job it couldn't verify).
   verify_liveness: false
+  # Ghost-job/scam heuristic (Block G): always on, badge-only by default —
+  # flagged postings are shown with their reasons, not hidden, since it's
+  # a deterministic heuristic that can misfire. Set true to auto-drop
+  # "suspicious"-tier postings instead ("caution"-tier is always shown).
+  drop_suspicious_postings: false
   visa_sponsorship_required: false
   must_haves: []
   dealbreakers: []                       # e.g. ["on-call rotation"]

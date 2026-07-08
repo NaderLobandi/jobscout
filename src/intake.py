@@ -175,6 +175,10 @@ def run_wizard() -> dict:
         "JobScout does; only checked on jobs about to be scored.[/yellow]")
     verify_liveness_pref = Confirm.ask(
         "Enable Playwright liveness verification?", default=False)
+    drop_suspicious_pref = Confirm.ask(
+        "Auto-drop postings flagged 'suspicious' by the ghost-job/scam "
+        "check (default: shown with a badge instead, since it's a "
+        "heuristic that can misfire)?", default=False)
     visa = Confirm.ask("Do you require visa sponsorship?", default=False)
     must_haves = _ask_list("Must-haves (comma-separated, optional)", "")
     dealbreakers = _ask_list("Dealbreakers (comma-separated, optional)", "")
@@ -204,6 +208,7 @@ def run_wizard() -> dict:
             "salary_floor_usd": salary_floor,
             "max_posting_age_days": max_posting_age or None,
             "verify_liveness": verify_liveness_pref,
+            "drop_suspicious_postings": drop_suspicious_pref,
             "visa_sponsorship_required": visa,
             "must_haves": must_haves,
             "dealbreakers": dealbreakers,

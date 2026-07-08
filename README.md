@@ -64,7 +64,7 @@ no matter how many boards exist behind it (the NxM integration problem).
 |---|---|
 | **Multi-agent system** | Orchestrator + search/scoring/drafting/review/insights sub-agents (`src/agents/`) |
 | **Custom MCP server** | `mcp-server/job_search_server.py`, stdio transport, official Python SDK |
-| **Security features** | HITL gate, PII masking, audit log, least privilege, deterministic filters, prompt-injection defense (`src/guardrails.py`) |
+| **Security features** | HITL gate, PII masking, audit log, least privilege, deterministic filters, ghost-job/scam heuristic, prompt-injection defense (`src/guardrails.py`) |
 | **Agent Skills** | Seven SKILL.md skills with progressive disclosure (`skills/`) |
 | **Memory** | Cross-session seen/approved tracking (`src/memory.py`) |
 | **Evals + tests** | pytest for deterministic parts, LLM-as-judge for the scoring agent (`tests/`, `evals/`) |
@@ -121,15 +121,18 @@ guardrails, and agents):
   (or on top of) picking a `communication_style` preset (direct /
   collaborative / enthusiastic), target roles, preferences, dealbreakers,
   an **only-show-postings-from-the-last-N-days** filter, optional
-  Playwright liveness verification, per-dimension scoring weights, draft
-  threshold, and job sources (including Lever/Ashby company tokens and
-  the LinkedIn ToS acknowledgment). Saves to `profile/profile.yaml`
-  (gitignored).
+  Playwright liveness verification, an opt-in to auto-drop postings the
+  ghost-job/scam check flags "suspicious," per-dimension scoring
+  weights, draft threshold, and job sources (including Lever/Ashby
+  company tokens and the LinkedIn ToS acknowledgment). Saves to
+  `profile/profile.yaml` (gitignored).
 - **🚀 Run JobScout** — one click runs search → deterministic filter →
   **archetype tagging** (🏷️ a role-category label — Research, Applied
   ML/MLOps, Agentic/LLM Systems, etc. — from a keyword taxonomy you can
-  customize in `profile.yaml`, no LLM call) → optional **🔎 liveness
-  verification** (Playwright, off by default — see below) → resume
+  customize in `profile.yaml`, no LLM call) → **ghost-job/scam check**
+  (🚩/⚠️ a Block G-style legitimacy badge, shown with its reasons — see
+  below) → optional **🔎 liveness verification** (Playwright, off by
+  default — see below) → resume
   analysis → per-job scoring with live progress, with an optional
   **"stop early once N found"** goal so it keeps scoring more jobs (up to
   your cost cap) instead of a fixed batch. Each match expands into a
@@ -483,6 +486,37 @@ none of your categories is tagged "Unclassified," which is informative
 in its own right (maybe your taxonomy needs a new category), not an
 error.
 
+## Ghost-Job / Scam Check ("Block G")
+
+Every job that survives the deterministic filter also gets a legitimacy
+check — always on, no opt-in needed, no LLM call. It looks for the same
+signals a careful human would notice, all deterministic:
+
+- **Scam-posting phrases** — "wire transfer," "processing fee," "gift
+  card," "Telegram only," and similar tells.
+- **Contractor risk** — "1099"/"independent contractor" language paired
+  with "no benefits" language, flagged so you can verify the actual
+  employment classification before applying.
+- **Title/requirements mismatch** — a title that says "entry-level,"
+  "junior," or "intern" while the description asks for 5+ years of
+  experience.
+- **Suspiciously thin descriptions** and **generic salary language**
+  ("competitive salary") with no stated range.
+- **Reposting** — the same title+company reappearing across multiple
+  past JobScout runs under a new URL/job id — the classic ghost-job
+  recycling pattern. This one uses data you already have: Records
+  already stores one entry per unique job id (hashed from the URL), so
+  a second entry with the same title+company can only exist because a
+  genuinely different posting arrived later. No date-gap math needed.
+
+Results in a tier — `high_confidence`, `caution`, or `suspicious` — shown
+as a badge on the job card (Run and History) with its specific reasons,
+never hidden by default: **a heuristic that can misfire should warn, not
+silently disappear a real job.** Set
+`preferences.drop_suspicious_postings: true` if you'd rather auto-drop
+the `suspicious` tier before scoring instead (same category as a
+dealbreaker); `caution`-tier postings are always shown regardless.
+
 ## Liveness Verification
 
 Off by default. `preferences.max_posting_age_days` already catches most
@@ -599,6 +633,14 @@ Path to production:
   also rate-limited (a handful of searches/month), so it's built to
   degrade to "no contacts found" rather than error, not to be your
   primary search method.
+- **The ghost-job/scam check can both under- and over-flag.** It's a
+  handful of deterministic signals, not a fraud model — a real posting
+  with an unusually thin description or generic salary language can
+  land in "caution" for no sinister reason, and a well-written scam
+  that avoids the known tell phrases won't be caught. Treat the badge
+  as "worth a second look," not a verdict — which is exactly why it's
+  shown with its specific reasons and defaults to badge-only rather
+  than silently dropping anything.
 
 ## Repo map
 

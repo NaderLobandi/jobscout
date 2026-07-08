@@ -61,7 +61,27 @@ Five components per the course framework: **model** (Claude API),
    automatically (`Records.upsert()` always persists the whole job
    dict) — no separate storage field needed. Surfaced as a tag on every
    job card and as a filter dimension in the Streamlit History page.
-3c. Liveness verification (opt-in, off by default): `src/liveness.py`
+3c. Legitimacy check ("Block G"): `guardrails.legitimacy_check()` — a
+   ghost-job/scam heuristic, always on, no LLM call. Every signal is
+   either the posting's own text (scam-tell phrases, contractor language
+   paired with no-benefits language, a junior/entry/intern title
+   demanding 5+ years, a suspiciously short description, generic salary
+   language with no stated range) or data JobScout already has in
+   Records (the same normalized title+company reappearing across
+   multiple past search runs under a new job id — the classic
+   ghost-job-recycling pattern, detected via `_count_reposts()` with no
+   date-gap math needed, since `make_job_id()` hashes the URL: a second
+   Records entry with the same title+company can only exist if it truly
+   arrived from a different posting). Weighted signals bucket into
+   `high_confidence` / `caution` / `suspicious`. Stored as
+   `job["legitimacy"]`, flows into Records the same way `archetype`
+   does. Badge-only by default — flagged postings are shown with their
+   reasons, not hidden, since a heuristic can misfire; a heuristic that
+   silently removes a real job is worse than one that occasionally
+   over-flags. `preferences.drop_suspicious_postings` (default false)
+   opts into hard-dropping the `suspicious` tier before scoring, same
+   category as a dealbreaker.
+3d. Liveness verification (opt-in, off by default): `src/liveness.py`
    augments the recency filter for the specific failure mode
    `posting_is_recent()` can't see — a posting whose page returns HTTP
    200 but says "no longer accepting applications"/"position filled"/
@@ -225,6 +245,12 @@ The weighted total is computed in **deterministic Python** from
    opt-in (requires `HUNTER_API_KEY`), sourced from one official keyed
    API (never a scraper), and JobScout never messages a discovered
    contact — displaying it for the human is the entire feature.
+9. **Ghost-job/scam heuristic ("Block G")** — `legitimacy_check()` (§2
+   step 3c) protects the *user*, not the agent's own integrity: every
+   signal is either the posting's own text or data already in Records,
+   no LLM call, no prompt-injection surface. Badge-only by default, same
+   "warn, don't silently remove" posture as the rest of JobScout's
+   deterministic filters.
 
 ## 5. Sources
 
