@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 
-from .base import JobSourceAdapter, http_client
+from .base import JobSourceAdapter, http_client, rotation_keyword
 from schema import Job, SearchQuery, make_job_id, strip_html
 
 API_URL = "https://api.adzuna.com/v1/api/jobs/us/search/1"
@@ -28,11 +28,16 @@ class AdzunaAdapter(JobSourceAdapter):
     async def search(self, query: SearchQuery) -> list[Job]:
         if not self.available():
             return []
+        # Deeper rounds rotate to the next keyword — fresh inventory
+        # instead of re-fetching the same starved query.
+        kw = rotation_keyword(query)
+        if kw is None:
+            return []  # keyword rotation exhausted
         params = {
             "app_id": os.environ["ADZUNA_APP_ID"],
             "app_key": os.environ["ADZUNA_APP_KEY"],
             "results_per_page": query.limit_per_source,
-            "what": " ".join(query.keywords[:1]) or "software engineer",
+            "what": kw or "software engineer",
         }
         if query.locations:
             params["where"] = query.locations[0]

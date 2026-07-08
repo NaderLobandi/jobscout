@@ -34,7 +34,8 @@ from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, WRITING_SAMPLES_DIR,
 from src.memory import Memory
 from src.orchestrator import (_explain_empty_filter, _relevance_rank,
                               deterministic_filter)
-from src.pipeline import fetch_jobs, verify_liveness
+from src.pipeline import (MAX_SEARCH_ROUNDS, collect_new_jobs, fetch_jobs,
+                          verify_liveness)
 from src.records import Records
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -594,7 +595,12 @@ def page_run() -> None:
                f"· draft threshold **{threshold}**")
 
     c1, c2, c3 = st.columns([1, 1, 1])
-    max_score = c1.number_input("Max jobs to score (cost cap)", 1, 40, 6)
+    max_score = c1.number_input(
+        "Jobs to score (target & cost cap)", 1, 40, 6,
+        help="The search is outcome-driven: it keeps deepening (keyword "
+             "rotation and further pages, up to 3 rounds) until this many "
+             "NEW jobs survive the deterministic filters — not just "
+             "however many one fixed fetch happens to yield.")
     min_matches = c2.number_input(
         f"Stop early once this many ≥ {threshold} found (0 = off)",
         0, 20, 0,
@@ -612,18 +618,35 @@ def page_run() -> None:
         st.session_state["client"] = Anthropic()
 
         with st.status("Running the agent pipeline…", expanded=True) as status:
-            st.write("🔎 Searching job boards via MCP (concurrent fan-out)…")
-            jobs = fetch_jobs(profile)
-            st.write(f"Found **{len(jobs)}** normalized, deduped jobs.")
+            target = int(max_score)
+            st.write(f"🔎 Searching job boards via MCP — deepening until "
+                     f"**{target}** new jobs found (up to "
+                     f"{MAX_SEARCH_ROUNDS} rounds)…")
 
-            st.write("🛡️ Deterministic filters (before any LLM call)…")
-            jobs, dropped = deterministic_filter(jobs, profile, memory)
-            st.write(f"**{len(jobs)}** kept after seen/type/dealbreaker/"
-                     "salary filters.")
+            # Deterministic filters run inside each round, so the loop
+            # deepens on the OUTCOME (new jobs worth scoring), not on raw
+            # fetch counts. Drop reasons accumulate across rounds for the
+            # empty-result explainer.
+            total_dropped: dict[str, int] = {}
+
+            def _keep(fresh: list[dict]) -> list[dict]:
+                kept, dropped = deterministic_filter(fresh, profile, memory)
+                for k, v in dropped.items():
+                    total_dropped[k] = total_dropped.get(k, 0) + v
+                return kept
+
+            def _narrate(page, found, kept_round, kept_total):
+                st.write(f"Round {page}: **{found}** found → "
+                         f"**{kept_round}** new kept "
+                         f"({kept_total}/{target}).")
+
+            jobs = collect_new_jobs(
+                lambda p: fetch_jobs(profile, page=p),
+                _keep, target=target, on_round=_narrate)
             if not jobs:
                 status.update(label="Nothing new to review", state="complete")
                 st.session_state["scored"] = []
-                st.warning(_explain_empty_filter(dropped, profile))
+                st.warning(_explain_empty_filter(total_dropped, profile))
                 return
 
             archetypes_config = profile.get("archetypes")

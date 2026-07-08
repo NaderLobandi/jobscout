@@ -132,7 +132,11 @@ guardrails, and agents):
   weights, draft threshold, and job sources (including Lever/Ashby
   company tokens and the LinkedIn ToS acknowledgment). Saves to
   `profile/profile.yaml` (gitignored).
-- **🚀 Run JobScout** — one click runs search → deterministic filter →
+- **🚀 Run JobScout** — one click runs an **outcome-driven search** (it
+  keeps deepening — rotating query keywords, paging further into boards
+  that support it, up to 3 rounds — until your target number of NEW jobs
+  survives the deterministic filters, instead of hoping one fixed fetch
+  is enough) → deterministic filter →
   **archetype tagging** (🏷️ a role-category label — Research, Applied
   ML/MLOps, Agentic/LLM Systems, etc. — from a keyword taxonomy you can
   customize in `profile.yaml`, no LLM call) → **ghost-job/scam check**
@@ -614,6 +618,15 @@ Path to production:
   to a handful that repeated every run. Broadening trades some precision
   for recall (the scorer ranks relevance downstream); set
   `preferences.strict_keyword_match: true` for verbatim-only matching.
+  Internship-seeking profiles additionally get intern-targeted query
+  compounds ("machine learning intern") so query-based boards actually
+  ask for internships.
+- Search is **outcome-driven**: up to 3 deepening rounds until the target
+  number of new jobs survives the filters. Feed boards contribute round 1
+  only (their whole inventory arrives at once); deeper rounds rotate
+  keywords on LinkedIn (hard-capped at 2 rounds — its ToS-risk request
+  budget is unchanged in spirit and strictly capped in code), JSearch,
+  Adzuna, and USAJOBS, and page further into The Muse.
 - Tier B adapters (Adzuna, USAJOBS) are implemented but exercised less than
   the keyless Tier A boards.
 - Scoring costs tokens: default caps at 6 jobs/run (`--max-score` to change).

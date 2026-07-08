@@ -14,7 +14,7 @@ from datetime import datetime
 
 import httpx
 
-from .base import JobSourceAdapter
+from .base import JobSourceAdapter, rotation_keyword
 from schema import Job, SearchQuery, make_job_id, strip_html
 
 API_URL = "https://data.usajobs.gov/api/search"
@@ -34,8 +34,13 @@ class USAJobsAdapter(JobSourceAdapter):
             "Authorization-Key": os.environ["USAJOBS_API_KEY"],
             "User-Agent": os.environ["USAJOBS_USER_AGENT"],
         }
+        # Deeper rounds rotate to the next keyword — fresh inventory
+        # instead of re-fetching the same starved query.
+        kw = rotation_keyword(query)
+        if kw is None:
+            return []  # keyword rotation exhausted
         params = {
-            "Keyword": " ".join(query.keywords[:1]),
+            "Keyword": kw,
             "ResultsPerPage": query.limit_per_source,
         }
         if query.locations:

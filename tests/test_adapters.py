@@ -261,3 +261,90 @@ def test_adapter_returns_empty_on_http_error(monkeypatch):
     )
     jobs = asyncio.run(remoteok.RemoteOKAdapter().search(SearchQuery()))
     assert jobs == []  # one dead board never kills the search
+
+
+# ---- Outcome-driven search rounds (SearchQuery.page) -----------------------
+
+def test_rotation_keyword_walks_the_list_then_exhausts():
+    from adapters.base import rotation_keyword
+    kws = ["ml researcher", "ml intern", "ai intern"]
+    assert rotation_keyword(SearchQuery(keywords=kws, page=1)) == "ml researcher"
+    assert rotation_keyword(SearchQuery(keywords=kws, page=2)) == "ml intern"
+    assert rotation_keyword(SearchQuery(keywords=kws, page=3)) == "ai intern"
+    assert rotation_keyword(SearchQuery(keywords=kws, page=4)) is None
+    # No keywords: round 1 falls back to the adapter default, deeper
+    # rounds have nothing new to ask.
+    assert rotation_keyword(SearchQuery(keywords=[], page=1)) == ""
+    assert rotation_keyword(SearchQuery(keywords=[], page=2)) is None
+
+
+def test_feed_adapter_contributes_round_one_only(monkeypatch):
+    # Whole inventory arrives on round 1 — deeper rounds must be free
+    # (return [] before any HTTP call).
+    def handler(request):
+        raise AssertionError("page>1 must never hit the network")
+
+    monkeypatch.setattr(
+        remoteok, "http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    jobs = asyncio.run(remoteok.RemoteOKAdapter().search(
+        SearchQuery(keywords=["ml"], page=2)))
+    assert jobs == []
+
+
+def test_linkedin_hard_caps_search_rounds(monkeypatch):
+    # ToS budget: rounds past MAX_SEARCH_ROUNDS (2) return nothing,
+    # statelessly, no matter what the caller asks for.
+    def handler(request):
+        raise AssertionError("capped round must never hit the network")
+
+    monkeypatch.setattr(
+        linkedin, "http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    adapter = linkedin.LinkedInAdapter(tos_acknowledged=True)
+    jobs = asyncio.run(adapter.search(
+        SearchQuery(keywords=["a", "b", "c"], page=3)))
+    assert jobs == []
+
+
+def test_jsearch_rotates_keyword_per_round(monkeypatch):
+    monkeypatch.setenv("JSEARCH_API_KEY", "test-key")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["query"] = dict(request.url.params)["query"]
+        return httpx.Response(200, json={"data": []})
+
+    monkeypatch.setattr(
+        jsearch, "http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    adapter = jsearch.JSearchAdapter()
+    kws = ["ml researcher", "machine learning intern"]
+
+    asyncio.run(adapter.search(SearchQuery(keywords=kws, page=2)))
+    assert captured["query"].startswith("machine learning intern")
+
+    # Rotation exhausted -> no request at all.
+    captured.clear()
+    jobs = asyncio.run(adapter.search(SearchQuery(keywords=kws, page=3)))
+    assert jobs == [] and captured == {}
+
+
+def test_themuse_reads_deeper_api_pages_per_round(monkeypatch):
+    requested = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(int(dict(request.url.params)["page"]))
+        return httpx.Response(200, json={"results": []})
+
+    monkeypatch.setattr(
+        themuse, "http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    asyncio.run(themuse.TheMuseAdapter().search(
+        SearchQuery(keywords=["ml"], page=2)))
+    # Round 2 starts where round 1 (API pages 1-3) left off.
+    assert requested[0] == 4

@@ -27,6 +27,8 @@ class RemotiveAdapter(JobSourceAdapter):
     requires_key = False
 
     async def search(self, query: SearchQuery) -> list[Job]:
+        if query.page > 1:
+            return []  # whole inventory came on round 1; nothing deeper exists
         # Remotive supports one search string; use the first keyword server-side
         # and filter the rest client-side.
         params: dict = {"limit": query.limit_per_source * 2}

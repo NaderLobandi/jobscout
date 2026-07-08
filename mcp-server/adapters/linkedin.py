@@ -12,8 +12,11 @@ first. Every mitigation below is deliberate; do not weaken them:
   endpoints a logged-out browser sees, under the honest JobScout
   User-Agent. Nothing ties the traffic to the user's LinkedIn account,
   so the realistic worst case is an IP rate-limit, not an account ban.
-- Minimal volume: ONE search request per run (first page, ≤25 results)
-  plus at most MAX_DETAIL_FETCHES description fetches, ≥1s apart.
+- Minimal volume: at most MAX_SEARCH_ROUNDS (2) search requests per run —
+  round 2 only fires when outcome-driven deepening is starved, with a
+  DIFFERENT keyword (rotation), never page-scrolling — plus at most
+  MAX_DETAIL_FETCHES description fetches per search, ≥1s apart. The cap
+  is stateless (`query.page > 2 → []`), so no caller can push past it.
 - Any 429/999 (LinkedIn's rate-limit codes) aborts every remaining
   LinkedIn request for this run.
 - Server-side f_JT/f_WT filters narrow the search, but are NOT trusted as
@@ -28,13 +31,14 @@ import asyncio
 import re
 from datetime import datetime
 
-from .base import JobSourceAdapter, http_client
+from .base import JobSourceAdapter, http_client, rotation_keyword
 from schema import Job, SearchQuery, guess_employment_type, make_job_id, strip_html
 
 SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
 
 MAX_DETAIL_FETCHES = 8
+MAX_SEARCH_ROUNDS = 2  # hard per-run cap on search requests (ToS budget)
 DETAIL_DELAY_S = 1.0
 _RATE_LIMIT_CODES = (429, 999)
 
@@ -69,12 +73,19 @@ class LinkedInAdapter(JobSourceAdapter):
     async def search(self, query: SearchQuery) -> list[Job]:
         if not self.tos_acknowledged:
             return []
+        # Stateless hard cap on per-run search volume (ToS budget): rounds
+        # past MAX_SEARCH_ROUNDS get nothing, regardless of the caller.
+        if query.page > MAX_SEARCH_ROUNDS:
+            return []
+        kw = rotation_keyword(query)
+        if kw is None:
+            return []  # keyword rotation exhausted — nothing new to ask
         params: dict[str, str] = {"start": "0"}
-        # ONE search phrase, ONE request: LinkedIn already ranks by
-        # relevance server-side; fanning out per keyword would multiply
-        # request volume against the ToS-risk budget for little gain.
-        if query.keywords:
-            params["keywords"] = query.keywords[0]
+        # ONE search phrase, ONE request per round: LinkedIn already ranks
+        # by relevance server-side; a deeper round asks a DIFFERENT
+        # keyword (rotation) rather than page-scrolling the starved one.
+        if kw:
+            params["keywords"] = kw
         if query.locations:
             params["location"] = query.locations[0]
         if query.remote_only:

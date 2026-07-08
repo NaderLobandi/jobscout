@@ -46,6 +46,22 @@ def http_client() -> httpx.AsyncClient:
     )
 
 
+def rotation_keyword(query: SearchQuery) -> str | None:
+    """The ONE query string for this search round, for boards whose API
+    takes a single free-text query (LinkedIn, JSearch, Adzuna, USAJOBS).
+
+    Round N uses keywords[N-1]: a fresh query pulls different inventory
+    than page 2 of an already-starved query, which is the whole point of
+    outcome-driven deepening. Returns None once the keyword list is
+    exhausted — the adapter has nothing new left to ask for and must
+    return [] rather than re-fetch a duplicate result set."""
+    if query.page <= 1:
+        return query.keywords[0] if query.keywords else ""
+    if query.page - 1 < len(query.keywords):
+        return query.keywords[query.page - 1]
+    return None
+
+
 def matches_keywords(text: str, keywords: list[str]) -> bool:
     """Client-side keyword filter for boards without a search parameter.
     Empty keyword list matches everything. A job matches if ANY keyword

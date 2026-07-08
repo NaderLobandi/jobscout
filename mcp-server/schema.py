@@ -49,6 +49,12 @@ class SearchQuery(BaseModel):
     locations: list[str] = Field(default_factory=list)
     remote_only: bool = False
     limit_per_source: int = 25
+    # Search round (1-based) for outcome-driven deepening. Each adapter
+    # interprets it per its own API: feed boards return [] past round 1
+    # (their whole inventory came on round 1), The Muse fetches deeper API
+    # pages, query-based boards rotate to keywords[page-1] (a fresh query
+    # pulls different inventory than page 2 of a starved one).
+    page: int = 1
 
 
 _TAG_RE = re.compile(r"<[^>]+>")

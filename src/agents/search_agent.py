@@ -16,24 +16,29 @@ from ..guardrails import audit
 from ..query_expansion import expand_keywords
 
 
-def build_query(profile: dict) -> dict:
+def build_query(profile: dict, page: int = 1) -> dict:
     prefs = profile.get("preferences", {})
     roles = prefs.get("target_roles", [])
     # Broaden by default so exact-phrase role titles don't starve recall
     # (see src/query_expansion.py); precision is the scorer's job. Opt out
     # with strict_keyword_match: true for verbatim-only matching.
-    keywords = roles if prefs.get("strict_keyword_match") else expand_keywords(roles)
+    keywords = (roles if prefs.get("strict_keyword_match")
+                else expand_keywords(roles, prefs.get("employment_types")))
     return {
         "keywords": keywords,
         "locations": prefs.get("locations", []),
         "remote_only": prefs.get("remote_preference") == "remote_only",
         "limit_per_source": 25,
+        "page": page,
     }
 
 
-async def search(session: ClientSession, profile: dict) -> list[dict]:
-    """Call the MCP search_jobs tool and parse the normalized job list."""
-    query = build_query(profile)
+async def search(session: ClientSession, profile: dict,
+                 page: int = 1) -> list[dict]:
+    """Call the MCP search_jobs tool and parse the normalized job list.
+    `page` is the outcome-driven search round — deeper rounds reach
+    fresh inventory (keyword rotation / real pagination per adapter)."""
+    query = build_query(profile, page=page)
     audit("mcp.search_jobs", query)
     result = await session.call_tool("search_jobs", query)
     jobs: list[dict] = []

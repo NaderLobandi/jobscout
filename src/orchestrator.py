@@ -41,6 +41,7 @@ from .intake import (extract_profile_text, extract_writing_samples_text,
 from .keyword_coverage import keyword_coverage
 from .liveness import filter_dead_postings
 from .memory import Memory
+from .pipeline import MAX_SEARCH_ROUNDS
 from .records import Records
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -173,23 +174,42 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
     records = Records() if auto else None
     past_entries = (records or Records()).all()
 
-    # ---- 2. Search via MCP ----------------------------------------------
-    console.print("[bold cyan]🔎 Searching job boards via MCP…[/bold cyan]")
+    # ---- 2+3. Outcome-driven search + deterministic filter ---------------
+    # Search until `max_score` NEW jobs survive the filter (the outcome is
+    # the goal, not the visit count): deeper rounds rotate query keywords
+    # and page further where a board's API allows it; boards with nothing
+    # deeper contribute round 1 only. Filter runs per round, before ANY
+    # LLM call. Same loop shape as pipeline.collect_new_jobs() — inline
+    # here because this path is async within one MCP session.
+    console.print("[bold cyan]🔎 Searching job boards via MCP — deepening "
+                  f"until {max_score} new jobs found (up to "
+                  f"{MAX_SEARCH_ROUNDS} rounds)…[/bold cyan]")
     server = StdioServerParameters(
         command=sys.executable,
         args=[str(REPO_ROOT / "mcp-server" / "job_search_server.py")],
     )
+    jobs: list[dict] = []
+    fetched_ids: set[str] = set()
+    total_dropped: dict[str, int] = {}
     async with stdio_client(server) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            jobs = await search_agent.search(session, profile)
-    console.print(f"Found [bold]{len(jobs)}[/bold] normalized, deduped jobs.")
-
-    # ---- 3. Deterministic filter (before ANY LLM call) --------------------
-    jobs, dropped = deterministic_filter(jobs, profile, memory)
+            for page in range(1, MAX_SEARCH_ROUNDS + 1):
+                raw = await search_agent.search(session, profile, page=page)
+                fresh = [j for j in raw if j["id"] not in fetched_ids]
+                fetched_ids.update(j["id"] for j in fresh)
+                kept, dropped = deterministic_filter(fresh, profile, memory)
+                for k, v in dropped.items():
+                    total_dropped[k] = total_dropped.get(k, 0) + v
+                jobs.extend(kept)
+                console.print(f"[dim]Round {page}: {len(raw)} found → "
+                              f"{len(kept)} new kept "
+                              f"({len(jobs)}/{max_score}).[/dim]")
+                if len(jobs) >= max_score or not raw:
+                    break
     if not jobs:
         console.print("[yellow]Nothing new to score. "
-                      f"{_explain_empty_filter(dropped, profile)}[/yellow]")
+                      f"{_explain_empty_filter(total_dropped, profile)}[/yellow]")
         return
 
     # Archetype tag + Block G legitimacy check: both deterministic, both

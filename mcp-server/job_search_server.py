@@ -119,6 +119,7 @@ async def search_jobs(
     locations: list[str] | None = None,
     remote_only: bool = False,
     limit_per_source: int = 25,
+    page: int = 1,
 ) -> list[dict]:
     """Search all enabled job boards at once and return normalized,
     deduplicated job postings.
@@ -128,15 +129,20 @@ async def search_jobs(
         locations: preferred locations, e.g. ["Denver", "Remote US"].
         remote_only: drop onsite-only roles where the source exposes that.
         limit_per_source: cap results per board (keeps responses small).
+        page: search round (1-based) — call again with page=2,3 to deepen
+            when round 1 didn't yield enough new jobs. Boards that can't
+            go deeper return nothing for later rounds.
     """
     _audit("search_jobs", {"keywords": keywords, "locations": locations,
                            "remote_only": remote_only,
-                           "limit_per_source": limit_per_source})
+                           "limit_per_source": limit_per_source,
+                           "page": page})
     query = SearchQuery(
         keywords=keywords,
         locations=locations or [],
         remote_only=remote_only,
         limit_per_source=limit_per_source,
+        page=page,
     )
     adapters = _build_adapters()
     # Concurrent fan-out: one slow board doesn't serialize the rest.

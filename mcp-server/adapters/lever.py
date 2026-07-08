@@ -46,6 +46,8 @@ class LeverAdapter(JobSourceAdapter):
         return bool(self.companies)
 
     async def search(self, query: SearchQuery) -> list[Job]:
+        if query.page > 1:
+            return []  # whole inventory came on round 1; nothing deeper exists
         boards = await asyncio.gather(
             *(self._fetch_board(token, query) for token in self.companies)
         )

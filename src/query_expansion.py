@@ -66,13 +66,46 @@ def _word_in(needle: str, haystack: str) -> bool:
     return re.search(left + re.escape(needle) + right, haystack) is not None
 
 
-def expand_keywords(roles: list[str]) -> list[str]:
+def _intern_compounds(roles: list[str]) -> list[str]:
+    """Intern-targeted compound phrases ("machine learning intern") for
+    internship-seeking profiles. Query-based boards (LinkedIn, JSearch,
+    Adzuna, USAJOBS) need the word in the QUERY itself to surface
+    internships — a domain phrase alone returns mostly senior roles.
+    Compounds only, never a bare "intern": that would match internships
+    in ANY field (marketing, finance …) and waste scoring budget."""
+    compounds: list[str] = []
+    for role in roles:
+        r = _WS_RE.sub(" ", (role or "")).strip().lower()
+        if not r:
+            continue
+        words = r.split()
+        i = 0
+        while i < len(words) and words[i] in _SENIORITY:
+            i += 1
+        core = words[i:]
+        # Domain (role noun stripped, >= 2 words left) + " intern".
+        if len(core) >= 3 and core[-1] in _ROLE_NOUNS:
+            compounds.append(" ".join(core[:-1]) + " intern")
+        # Every member of a matched abbreviation class + " intern"
+        # ("ml intern", "ai intern", "data scientist intern" are all
+        # real posting titles).
+        for cls in _EQUIV_CLASSES:
+            if any(_word_in(m, r) for m in cls):
+                compounds.extend(f"{member} intern" for member in cls)
+    return compounds
+
+
+def expand_keywords(roles: list[str],
+                    employment_types: list[str] | None = None) -> list[str]:
     """Broaden target roles into a recall-oriented keyword list.
 
-    Originals come first and in order — LinkedIn's adapter searches only
-    keywords[0], so the primary role must stay primary. The rest are
-    appended deterministically (deduped, order-stable) so a given profile
-    always produces the same query."""
+    The primary role stays keywords[0] — query-based adapters search one
+    keyword per round (rotation), and round 1 must be the user's own
+    primary role. For internship-seeking profiles, intern-targeted
+    compounds come right after it so rotation reaches them by round 2
+    (LinkedIn hard-caps at 2 rounds). Everything is deterministic
+    (deduped, order-stable) so a given profile always produces the same
+    query."""
     ordered: list[str] = []
     seen: set[str] = set()
 
@@ -82,8 +115,15 @@ def expand_keywords(roles: list[str]) -> list[str]:
             seen.add(term)
             ordered.append(term)
 
-    # Originals first, in the user's order.
-    for role in roles:
+    # Primary original first — it is round 1's query on rotating boards.
+    for role in roles[:1]:
+        add(role)
+    # Intern compounds next, so keyword rotation reaches them by round 2.
+    if "internship" in (employment_types or []):
+        for compound in _intern_compounds(roles):
+            add(compound)
+    # Remaining originals, in the user's order.
+    for role in roles[1:]:
         add(role)
 
     for role in roles:

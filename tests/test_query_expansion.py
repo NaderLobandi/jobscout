@@ -54,3 +54,29 @@ def test_abbreviation_input_expands_to_long_form():
 def test_empty_and_blank_roles_are_safe():
     assert expand_keywords([]) == []
     assert expand_keywords(["", "  "]) == []
+
+
+def test_internship_profiles_get_intern_compounds_early():
+    # Query-based boards rotate one keyword per round, and LinkedIn hard
+    # caps at round 2 — so intern compounds must land right after the
+    # primary role, not at the tail of the list.
+    kw = expand_keywords(["Machine Learning Researcher", "AI Researcher"],
+                         employment_types=["internship"])
+    assert kw[0] == "machine learning researcher"   # primary stays primary
+    assert kw[1] == "machine learning intern"        # round 2's query
+    assert "ai intern" in kw[:6]
+
+
+def test_intern_compounds_never_include_bare_intern():
+    # A bare "intern" keyword would match internships in ANY field and
+    # waste scoring budget on marketing/finance internships.
+    kw = expand_keywords(["Machine Learning Engineer"],
+                         employment_types=["internship"])
+    assert "intern" not in kw
+    assert "internship" not in kw
+
+
+def test_non_internship_profiles_get_no_intern_compounds():
+    kw = expand_keywords(["Machine Learning Engineer"],
+                         employment_types=["full-time"])
+    assert not any("intern" in k for k in kw)

@@ -24,9 +24,12 @@ class TheMuseAdapter(JobSourceAdapter):
 
     async def search(self, query: SearchQuery) -> list[Job]:
         jobs: list[Job] = []
+        # Real pagination: search round N reads API pages (N-1)*3+1 .. N*3,
+        # so outcome-driven deepening actually reaches fresh inventory.
+        first = (query.page - 1) * MAX_PAGES + 1
         try:
             async with http_client() as client:
-                for page in range(1, MAX_PAGES + 1):
+                for page in range(first, first + MAX_PAGES):
                     resp = await client.get(API_URL, params={"page": page})
                     resp.raise_for_status()
                     results = resp.json().get("results", [])

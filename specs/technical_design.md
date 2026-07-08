@@ -57,10 +57,41 @@ Five components per the course framework: **model** (Claude API),
    new." Expansion adds the seniority-stripped core, the role-noun-stripped
    domain ("machine learning"), and abbreviation equivalents (ML ↔ machine
    learning, AI ↔ artificial intelligence). Originals stay first because
-   the LinkedIn adapter searches only `keywords[0]`.
+   query-based adapters search one keyword per round (see 2b) and the
+   user's primary role must be round 1's query.
+   Employment-type awareness: when the profile is internship-only,
+   expansion inserts intern-targeted compound phrases ("machine learning
+   intern", "ai intern") right after the primary role — query-based boards
+   need the word in the QUERY to surface internships; a bare "intern"
+   keyword is deliberately never emitted (it would match internships in
+   any field and waste scoring budget).
    `adapters/base.matches_keywords()` is anchored to word boundaries (not
    raw substring) so short abbreviations ("ml", "ai") match the WORD, not
    the "ai" inside "training" — this is what makes broadening safe.
+2b. Outcome-driven search rounds: one fixed-depth fetch is hope, not a
+   guarantee — so search is a LOOP that deepens until it has collected
+   `max_score` NEW jobs that survive the deterministic filter (the "Max
+   jobs to score" knob is the outcome target, not a visit budget), or
+   `MAX_SEARCH_ROUNDS` (3) is reached, or a round returns nothing at all.
+   `SearchQuery.page` (default 1) carries the round number; each adapter
+   interprets it per its own API, statelessly:
+   - Feed/company boards (RemoteOK, Remotive, Arbeitnow, Greenhouse,
+     Lever, Ashby): their entire inventory arrives on round 1, so
+     `page > 1` returns `[]` immediately — zero extra HTTP.
+   - The Muse: real API pagination — round N fetches its pages
+     (N-1)*3+1 … N*3.
+   - Query-based boards (LinkedIn, JSearch, Adzuna, USAJOBS): round N
+     queries `keywords[N-1]` (keyword ROTATION — a fresh query pulls
+     different inventory than page 2 of a starved query); `[]` once
+     keywords run out. LinkedIn additionally hard-caps at 2 rounds inside
+     the adapter (stateless `page > 2 → []`) so its worst-case per-run
+     request volume stays strictly capped per the CLAUDE.md mitigation
+     (2 search GETs + ≤2×limit detail GETs, delays and permanent
+     rate-limit backoff unchanged). JSearch's free tier budgets 200
+     requests/month: deeper rounds only fire when the run is starved.
+   Cross-round dedup is by job id in the caller (`collect_new_jobs()` in
+   `src/pipeline.py` for the UI; the same loop inline in the CLI
+   orchestrator). Round progress is narrated in both surfaces.
 3. Filter: deterministic dealbreaker + employment-type + salary-floor +
    posting-age filters BEFORE scoring. `guardrails.posting_is_recent()`
    drops anything older than `preferences.max_posting_age_days` — and,

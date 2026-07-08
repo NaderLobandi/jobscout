@@ -22,7 +22,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 
-from .base import JobSourceAdapter, http_client
+from .base import JobSourceAdapter, http_client, rotation_keyword
 from schema import Job, SearchQuery, guess_employment_type, make_job_id, strip_html
 
 API_URL = "https://jsearch.p.rapidapi.com/search"
@@ -64,8 +64,13 @@ class JSearchAdapter(JobSourceAdapter):
         if not self.available():
             return []
         # JSearch takes one natural-language query; num_pages=1 keeps each
-        # run to a single request against the 200/month free budget.
-        q = query.keywords[0] if query.keywords else "software engineer"
+        # round to a single request against the 200/month free budget, and
+        # deeper rounds rotate to the next keyword (fresh inventory) —
+        # they only fire when the run is starved for new jobs.
+        kw = rotation_keyword(query)
+        if kw is None:
+            return []  # keyword rotation exhausted
+        q = kw or "software engineer"
         if query.locations:
             q = f"{q} in {query.locations[0]}"
         params: dict[str, str] = {"query": q, "page": "1", "num_pages": "1"}

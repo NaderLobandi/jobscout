@@ -20,6 +20,8 @@ class RemoteOKAdapter(JobSourceAdapter):
     requires_key = False
 
     async def search(self, query: SearchQuery) -> list[Job]:
+        if query.page > 1:
+            return []  # whole inventory came on round 1; nothing deeper exists
         try:
             async with http_client() as client:
                 resp = await client.get(API_URL)
