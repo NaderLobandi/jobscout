@@ -34,24 +34,30 @@ the human-in-the-loop checkpoint is the core of JobScout's security design.
 ```
                  ┌──────────────────────────────────────────────┐
                  │ Orchestrator (src/orchestrator.py)           │
-                 │  the agent loop: intake → search → filter →  │
-                 │  score → draft → HITL gate → memory          │
+                 │  intake → search → filter → tag → score →    │
+                 │  draft → HITL gate → memory                  │
                  └──────┬──────────────────────┬────────────────┘
               Claude API│                      │ MCP (stdio)
         ┌───────────────▼───────┐   ┌──────────▼──────────────────┐
         │ Specialist sub-agents │   │ Job-Search MCP Server       │
         │  · search (no LLM)    │   │  search_jobs                │
-        │  · scoring + skills   │   │  get_job_details            │
-        │  · drafting + skills  │   │  list_sources               │
-        └───────────────────────┘   └──────────┬──────────────────┘
-                                               │ concurrent fan-out, GET-only
+        │  · scoring + voice    │   │  get_job_details            │
+        │  · drafting + CV      │   │  list_sources               │
+        │  · insights           │   └──────────┬──────────────────┘
+        └───────────────────────┘             │ concurrent fan-out, GET-only
           ┌──────────┬──────────┼──────────┬───────────┬─────────┬─────────┐
        RemoteOK   The Muse  Remotive  Arbeitnow  Greenhouse   Lever     Ashby
-     (+ JSearch, Adzuna, USAJOBS with free keys · LinkedIn opt-in, see ⚠️)
+     (+ JSearch, Adzuna, USAJOBS with free keys · LinkedIn opt-in, see below)
 
   Guardrails wrap everything (src/guardrails.py):
-  PII masking ⇄ unmasking · audit log (logs/audit.jsonl) · HITL hard stop
+  PII masking ⇄ unmasking · audit log · HITL hard stop · ghost-job/scam
+  check (Block G) · Hunter.io contact lookup (opt-in, third-party PII)
   Memory (.jobscout_memory.json) dedupes across sessions.
+
+  "tag" = archetype label + Block G legitimacy check (always on, no LLM).
+  Opt-in extras not shown above: Playwright liveness verification before
+  scoring, a learned voice profile shaping the draft, Hunter.io contact
+  lookup after drafting — each off by default, each documented below.
 ```
 
 The MCP server normalizes every board into one `Job` schema and dedupes by
@@ -147,15 +153,16 @@ guardrails, and agents):
   HITL gate as a UI.
 - **📚 History** — every job ever scored, with scores, decisions, the date
   you decided, the origin **publisher** for aggregator sources (e.g.
-  `jsearch (Glassdoor)`), its **🏷️ archetype tag**, and saved cover letters
-  (`.jobscout_records.json`, gitignored), plus a JSON export. Each entry
-  expands into its full per-dimension score breakdown and draft, so the
-  summary table's score always has somewhere to drill into — filter by
-  decision (including `undecided`) or by **archetype** to see exactly
-  what an unattended `--auto` run left for you to review, or to focus on
-  one category of role at a time. Opens with a **recurring-gaps** view:
-  which scoring dimension
-  consistently drags you down across your whole history (pure
+  `jsearch (Glassdoor)`), its **🏷️ archetype tag**, its **legitimacy
+  badge** (Block G — 🚩/⚠️ shown with reasons when it's not a clean
+  `high_confidence`), and saved cover letters (`.jobscout_records.json`,
+  gitignored), plus a JSON export. Each entry expands into its full
+  per-dimension score breakdown and draft, so the summary table's score
+  always has somewhere to drill into — filter by decision (including
+  `undecided`) or by **archetype** to see exactly what an unattended
+  `--auto` run left for you to review, or to focus on one category of
+  role at a time. Opens with a **recurring-gaps** view: which scoring
+  dimension consistently drags you down across your whole history (pure
   aggregation, free, no LLM call), with an on-demand button to get a
   short, evidence-grounded suggestion for the weakest one.
 
@@ -647,7 +654,7 @@ Path to production:
 ```
 CLAUDE.md                    agent operating rules (spec-first, security)
 specs/                       source of truth: design + BDD scenarios
-skills/                      6 Agent Skills (progressive disclosure)
+skills/                      7 Agent Skills (progressive disclosure)
 mcp-server/                  MCP server + normalized schema + 11 adapters
 src/                         orchestrator, sub-agents, guardrails, memory,
                              intake, pipeline (UI helpers), records (history),
