@@ -1,4 +1,4 @@
-# JobScout 🔭 — a personal job-search concierge agent
+# JobScout 🔭 your personal job-search concierge agent
 
 ![JobScout banner](./docs/banner.gif)
 
