@@ -5,6 +5,7 @@
 # Run:    docker run -it --env-file .env \
 #           -v $(pwd)/profile:/app/profile \
 #           -v $(pwd)/logs:/app/logs \
+#           -v $(pwd)/output:/app/output \
 #           jobscout
 #
 # Secrets come in via --env-file at runtime — nothing is baked into the image.

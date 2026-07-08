@@ -12,6 +12,7 @@ profile/documents/*
 logs/
 .jobscout_memory.json
 .jobscout_records.json
+output/
 
 # Python
 __pycache__/

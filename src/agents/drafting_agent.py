@@ -138,3 +138,78 @@ def review_draft(client: Anthropic, skills_profile: str, job: dict,
     )
     text = next(b.text for b in response.content if b.type == "text")
     return json.loads(text)
+
+
+CV_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "skills": {"type": "array", "items": {"type": "string"}},
+        "experience": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "company": {"type": "string"},
+                    "dates": {"type": "string"},
+                    "location": {"type": "string"},
+                    "bullets": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["title", "company", "dates", "location", "bullets"],
+                "additionalProperties": False,
+            },
+        },
+        "education": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "degree": {"type": "string"},
+                    "institution": {"type": "string"},
+                    "dates": {"type": "string"},
+                },
+                "required": ["degree", "institution", "dates"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["summary", "skills", "experience", "education"],
+    "additionalProperties": False,
+}
+
+
+def tailor_cv(client: Anthropic, masked_resume: str, skills_profile: str,
+             job: dict) -> dict:
+    """Restructure the candidate's REAL resume into ATS-friendly sections
+    tailored to one job — selection, reordering, and rephrasing only,
+    never new facts. Works from the full masked resume text (not just the
+    condensed skills_profile) so the LLM has real dates/companies/bullets
+    to draw from instead of inventing plausible-looking specifics.
+
+    Returns masked CV sections — src/cv_render.py unmasks locally, once,
+    only at final PDF render."""
+    audit("llm.tailor_cv", {"job_id": job["id"], "title": job["title"]})
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=2500,
+        system=load_skill("cv-tailoring"),
+        output_config={"format": {"type": "json_schema", "schema": CV_SCHEMA}},
+        messages=[{
+            "role": "user",
+            "content": (
+                f"CANDIDATE SKILLS PROFILE (PII-masked, condensed):\n"
+                f"{skills_profile}\n\n"
+                f"FULL MASKED RESUME (source of truth for real facts):\n"
+                f"{masked_resume or '(no resume provided)'}\n\n"
+                "<job_posting>\n"
+                f"Title: {job['title']}\nCompany: {job['company']}\n"
+                f"Location: {job['location']} ({job['remote']})\n"
+                f"Description: {job['description']}\n"
+                "</job_posting>"
+            ),
+        }],
+        **thinking_kwargs(),
+    )
+    text = next(b.text for b in response.content if b.type == "text")
+    return json.loads(text)

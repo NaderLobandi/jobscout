@@ -20,6 +20,7 @@ import yaml
 from dotenv import load_dotenv
 
 from src.agents import MODEL, drafting_agent, insights_agent, scoring_agent
+from src.cv_pipeline import generate_cv_pdf
 from src.guardrails import PIIMasker
 from src.insights import aggregate_dimension_gaps
 from src.keyword_coverage import keyword_coverage
@@ -31,6 +32,7 @@ from src.pipeline import fetch_jobs
 from src.records import Records
 
 REPO_ROOT = Path(__file__).resolve().parent
+CV_OUTPUT_DIR = REPO_ROOT / "output" / "cvs"
 load_dotenv(REPO_ROOT / ".env")
 
 st.set_page_config(page_title="JobScout", page_icon="🔭", layout="wide")
@@ -62,6 +64,23 @@ def _source_label(job: dict) -> str:
     src = job.get("source", "")
     pub = job.get("publisher")
     return f"{src} ({pub})" if pub else src
+
+
+def _cv_download_button(job: dict, record: dict, key: str) -> None:
+    """Reads the tailored CV back off disk for the download button — the
+    PDF itself isn't kept in Records (large binary; a path is enough)."""
+    path = record.get("cv_pdf_path")
+    if not path:
+        return
+    try:
+        pdf_bytes = Path(path).read_bytes()
+    except FileNotFoundError:
+        st.caption("📎 Tailored CV was generated but the file is missing "
+                  "on disk now (moved or cleaned up).")
+        return
+    file_name = f"CV_{job.get('company', 'role')}.pdf".replace(" ", "_")
+    st.download_button("📎 Download tailored ATS CV (PDF)", data=pdf_bytes,
+                       file_name=file_name, mime="application/pdf", key=key)
 
 
 # ---------------------------------------------------------------------------
@@ -313,7 +332,7 @@ def page_profile() -> None:
 # ---------------------------------------------------------------------------
 
 def _draft_for(package: dict, masker: PIIMasker, skills_profile: str,
-               communication_style: str = "") -> None:
+               profile: dict, communication_style: str = "") -> None:
     job = package["job"]
     client = st.session_state["client"]
     with st.spinner(f"Drafting application package for {job['title']}…"):
@@ -329,6 +348,14 @@ def _draft_for(package: dict, masker: PIIMasker, skills_profile: str,
         drafts["review_notes"] = review["revision_summary"]
         drafts["review_issues"] = review["issues_found"]
         drafts["keyword_coverage"] = keyword_coverage(job, drafts["cover_letter"])
+    with st.spinner("Tailoring an ATS-optimized CV…"):
+        try:
+            resume_text = masker.mask(extract_profile_text(profile))
+            drafts["cv_pdf_path"] = generate_cv_pdf(
+                client, resume_text, skills_profile, job,
+                profile.get("candidate", {}), masker, CV_OUTPUT_DIR)
+        except Exception as exc:
+            st.warning(f"Cover letter ready, but CV generation failed: {exc}")
     records.upsert(job, drafts=drafts)
     st.rerun()
 
@@ -340,7 +367,8 @@ def _decide(job: dict, decision: str) -> None:
 
 
 def render_package(package: dict, threshold: int, masker: PIIMasker,
-                   skills_profile: str, communication_style: str = "") -> None:
+                   skills_profile: str, profile: dict,
+                   communication_style: str = "") -> None:
     job = package["job"]
     record = records.get(job["id"]) or {}
     decision = record.get("decision")
@@ -388,12 +416,14 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
                 c1, c2 = st.columns(2)
                 c1.markdown("✅ " + (", ".join(kw["covered"]) or "—"))
                 c2.markdown("⚠️ " + (", ".join(kw["missing"]) or "—"))
+            _cv_download_button(job, record, key=f"cv_{job['id']}")
         else:
             hint = ("" if package["score"] >= threshold else
                     " (below your draft threshold — drafting is optional)")
             if st.button(f"✍️ Draft cover letter + resume tweaks{hint}",
                          key=f"draft_{job['id']}"):
-                _draft_for(package, masker, skills_profile, communication_style)
+                _draft_for(package, masker, skills_profile, profile,
+                          communication_style)
 
         # HITL gate — the human decides; JobScout never submits.
         st.info("🔒 JobScout never submits applications. If you approve, "
@@ -533,7 +563,7 @@ def page_run() -> None:
     communication_style = profile.get("candidate", {}).get("communication_style", "")
     for package in scored:
         render_package(package, threshold, masker,
-                       st.session_state.get("skills_profile", ""),
+                       st.session_state.get("skills_profile", ""), profile,
                        communication_style)
 
 
@@ -631,6 +661,7 @@ def render_history_entry(e: dict) -> None:
                            f"{len(kw['covered'])}/{total}**")
                 st.caption(f"✅ {', '.join(kw['covered']) or '—'}")
                 st.caption(f"⚠️ {', '.join(kw['missing']) or '—'}")
+            _cv_download_button(job, e, key=f"hist_cv_{job['id']}")
 
         st.divider()
         c1, c2, c3 = st.columns(3)

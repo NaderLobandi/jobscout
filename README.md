@@ -65,7 +65,7 @@ no matter how many boards exist behind it (the NxM integration problem).
 | **Multi-agent system** | Orchestrator + search/scoring/drafting/review/insights sub-agents (`src/agents/`) |
 | **Custom MCP server** | `mcp-server/job_search_server.py`, stdio transport, official Python SDK |
 | **Security features** | HITL gate, PII masking, audit log, least privilege, deterministic filters, prompt-injection defense (`src/guardrails.py`) |
-| **Agent Skills** | Five SKILL.md skills with progressive disclosure (`skills/`) |
+| **Agent Skills** | Six SKILL.md skills with progressive disclosure (`skills/`) |
 | **Memory** | Cross-session seen/approved tracking (`src/memory.py`) |
 | **Evals + tests** | pytest for deterministic parts, LLM-as-judge for the scoring agent (`tests/`, `evals/`) |
 | **Deployability** | `Dockerfile` + path to production below |
@@ -122,7 +122,8 @@ guardrails, and agents):
   **"stop early once N found"** goal so it keeps scoring more jobs (up to
   your cost cap) instead of a fixed batch. Each match expands into a
   score-dimension breakdown, a drafted cover letter that's already been
-  through a second-pass reviewer critique + resume tweaks, a deterministic
+  through a second-pass reviewer critique + resume tweaks, a **tailored,
+  ATS-optimized CV PDF** you can download directly, a deterministic
   **keyword-coverage check** against the posting (no LLM call — which of
   the posting's own key terms actually made it into the letter), and
   **Approve / Reject / Skip** buttons — the HITL gate as a UI.
@@ -167,11 +168,23 @@ already-seen jobs, wrong employment types, dealbreakers, salary-floor
 misses, and (if `preferences.max_posting_age_days` is set) postings older
 than that many days **in code, before any LLM call** → analyzes your
 masked resume once → scores each job per dimension with rationale →
-drafts a cover letter + resume tweaks for jobs above your threshold → a
-second, fresh-context reviewer agent critiques the draft (unsupported
-claims, missed keywords, generic phrasing, tone) and returns a revised
-letter → presents each package, including the reviewer's notes, at the
+drafts a cover letter + resume tweaks + a tailored ATS CV PDF for jobs
+above your threshold → a second, fresh-context reviewer agent critiques
+the cover letter draft (unsupported claims, missed keywords, generic
+phrasing, tone) and returns a revised letter → presents each package,
+including the reviewer's notes and a link to the generated CV, at the
 approval gate. You review, then apply yourself at the job URL.
+
+**Tailored ATS CV.** Alongside the cover letter, JobScout restructures
+your real resume — same employer names, titles, dates, and achievements,
+just reordered and reframed toward this specific posting's terminology —
+into a clean, single-column PDF built from core PDF fonts (not an
+embedded/subset font, which is what breaks copy-paste text extraction in
+some LaTeX-generated resumes). It never invents a job, degree, metric, or
+skill that isn't already in your resume (`skills/cv-tailoring/SKILL.md`);
+if a section is missing from your resume, it's omitted, not padded. PII
+is unmasked only at the final local render, exactly like the cover
+letter. Saved to `output/cvs/<job_id>.pdf` (gitignored).
 
 **Only-recent-postings filter.** Set `preferences.max_posting_age_days`
 (Profile page, or directly in `profile.yaml`) to drop anything older than
@@ -317,6 +330,9 @@ npx @modelcontextprotocol/inspector .venv/bin/python mcp-server/job_search_serve
 2. **PII masking (context hygiene)** — your name/email/phone/address become
    `{{CANDIDATE_NAME}}`-style placeholders before any LLM call; real values
    are reinjected only at final local render, never through the model.
+   The tailored CV PDF follows the identical pattern: `tailor_cv()` only
+   ever sees masked text, and `src/cv_render.py` unmasks locally, once,
+   at render time.
 3. **Least privilege** — the MCP server is read-only (GET-only HTTP), and the
    Docker image runs as a non-root user.
 4. **Audit log** — every tool and LLM call is appended to `logs/audit.jsonl`
@@ -402,7 +418,7 @@ Local container (works today):
 
 ```bash
 docker build -t jobscout .
-docker run -it --env-file .env -v $(pwd)/profile:/app/profile -v $(pwd)/logs:/app/logs jobscout
+docker run -it --env-file .env -v $(pwd)/profile:/app/profile -v $(pwd)/logs:/app/logs -v $(pwd)/output:/app/output jobscout
 ```
 
 Path to production:
@@ -440,19 +456,27 @@ Path to production:
   is still marked "seen" — it won't resurface in a future search, and
   History has no "draft now" button for a score-only entry. Rare, but if
   you hit it, you'd need to draft that one manually another way.
+- **The tailored CV is plain, deliberately.** Single column, core PDF
+  fonts, no graphics or multi-column layout — that's an ATS-safety choice
+  (fancy layouts are exactly what confuses parsers), not a limitation of
+  the renderer, but it means it won't look like a designed resume
+  template. It's still worth a skim before you send it, same as the
+  cover letter.
 
 ## Repo map
 
 ```
 CLAUDE.md                    agent operating rules (spec-first, security)
 specs/                       source of truth: design + BDD scenarios
-skills/                      5 Agent Skills (progressive disclosure)
+skills/                      6 Agent Skills (progressive disclosure)
 mcp-server/                  MCP server + normalized schema + 11 adapters
 src/                         orchestrator, sub-agents, guardrails, memory,
-                             intake, pipeline (UI helpers), records (history)
+                             intake, pipeline (UI helpers), records (history),
+                             cv_render (ATS PDF layout), cv_pipeline (glue)
 app.py                       Streamlit UI (profile / run / history)
 profile/profile.example.yaml committed template (real profile is gitignored)
 profile/documents/           optional supplementary docs (gitignored except README)
+output/cvs/                  generated ATS CV PDFs (gitignored)
 evals/                       golden set + LLM-as-judge harness
 tests/                       pytest for the deterministic parts
 Dockerfile                   deployability

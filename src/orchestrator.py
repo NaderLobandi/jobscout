@@ -30,6 +30,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .agents import scoring_agent, drafting_agent, search_agent
+from .cv_pipeline import generate_cv_pdf
 from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
                          posting_is_recent, violates_dealbreakers)
 from .intake import extract_profile_text, load_profile, run_wizard
@@ -38,6 +39,7 @@ from .memory import Memory
 from .records import Records
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+CV_OUTPUT_DIR = REPO_ROOT / "output" / "cvs"
 console = Console()
 
 
@@ -218,6 +220,9 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
                 package["review_notes"] = review["revision_summary"]
                 package["review_issues"] = review["issues_found"]
                 package["keyword_coverage"] = keyword_coverage(job, package["cover_letter"])
+                package["cv_pdf_path"] = generate_cv_pdf(
+                    client, resume_text, skills_profile, job, candidate,
+                    masker, CV_OUTPUT_DIR)
                 draft_ok = True
             except Exception as exc:
                 console.print(f"[red]drafting failed: {exc}[/red]")

@@ -193,6 +193,8 @@ def hitl_gate(package: dict) -> str:
     if package.get("resume_tweaks"):
         console.print(Panel(package["resume_tweaks"],
                             title="📄 Suggested resume tweaks", border_style="blue"))
+    if package.get("cv_pdf_path"):
+        console.print(f"[dim]📎 Tailored ATS CV: {package['cv_pdf_path']}[/dim]")
     if package.get("review_notes"):
         issues = "\n".join(
             f"  • {i['category'].replace('_', ' ')}: {i['detail']}"

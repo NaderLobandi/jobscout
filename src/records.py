@@ -49,6 +49,7 @@ class Records:
             entry["review_notes"] = drafts.get("review_notes")
             entry["review_issues"] = drafts.get("review_issues")
             entry["keyword_coverage"] = drafts.get("keyword_coverage")
+            entry["cv_pdf_path"] = drafts.get("cv_pdf_path")
         if decision is not None:
             entry["decision"] = decision
             entry["decided_at"] = _now()

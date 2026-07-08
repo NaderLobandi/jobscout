@@ -14,7 +14,8 @@ JobScout is a personal job-search **concierge agent**. It:
 4. Scores each surviving job against the (PII-masked) resume + supplementary
    documents + preferences, with a weighted per-dimension breakdown and
    plain-language rationale
-5. Drafts a tailored cover letter + resume tweak suggestions for strong matches
+5. Drafts a tailored cover letter, resume tweak suggestions, and an
+   ATS-optimized CV PDF for strong matches
 6. **Stops at a human-in-the-loop gate.** The user reviews and applies manually
    via the job URL. JobScout never auto-submits.
 
@@ -68,8 +69,21 @@ Five components per the course framework: **model** (Claude API),
    appear in the final cover letter — no LLM call, a second, independent
    check on the same claim the drafting/review skills already instruct
    for ("use the posting's terminology, don't stuff keywords").
-6. HITL gate: present package (including reviewer notes and keyword
-   coverage), hard stop, user applies manually.
+5d. ATS CV generation: `src/agents/drafting_agent.py`'s `tailor_cv()`
+   restructures the candidate's REAL resume (full masked text, not the
+   condensed skills profile, so the model has real dates/companies to
+   draw from) into CV sections for this posting — selecting, reordering,
+   and rephrasing only, never inventing an employer, title, date, or
+   metric (`skills/cv-tailoring/SKILL.md`). `src/cv_render.py` then
+   renders those sections into a PDF locally with **no LLM call** —
+   deterministic layout, core PDF fonts only (no embedded/subset font,
+   which is what breaks text-layer extraction in some LaTeX-generated
+   resumes), single column, ASCII-only structural characters. PII is
+   unmasked ONLY at this final local render step, same pattern as the
+   cover letter. The PDF is written to `output/cvs/<job_id>.pdf`
+   (gitignored); only the path is stored in Records.
+6. HITL gate: present package (including reviewer notes, keyword
+   coverage, and the tailored CV), hard stop, user applies manually.
    `--auto` (CLI): for unattended/scheduled runs, where nobody is at a
    terminal to answer the interactive prompt. The gate itself is NOT
    skipped or weakened — it's deferred: drafted packages are written to
