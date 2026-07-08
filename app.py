@@ -20,6 +20,7 @@ import yaml
 from dotenv import load_dotenv
 
 from src.agents import MODEL, drafting_agent, insights_agent, scoring_agent
+from src.archetype import guess_archetype
 from src.contacts import find_contacts
 from src.contacts import available as hunter_available
 from src.cv_pipeline import generate_cv_pdf
@@ -411,8 +412,9 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
     decision = record.get("decision")
     badge = {"approved": "✅ approved", "rejected": "❌ rejected",
              "skipped": "⏭ skipped"}.get(decision, "")
+    tag = f"🏷️ {job['archetype']}  " if job.get("archetype") else ""
     label = (f"{score_badge(package['score'], threshold)} — "
-             f"**{job['title']}** @ {job['company']}  {badge}")
+             f"**{job['title']}** @ {job['company']}  {tag}{badge}")
 
     with st.expander(label, expanded=package["score"] >= threshold and not decision):
         meta, dims = st.columns([1, 2])
@@ -529,6 +531,11 @@ def page_run() -> None:
                 st.warning("No new jobs to score — broaden your target roles "
                            "or review History.")
                 return
+
+            archetypes_config = profile.get("archetypes")
+            for job in jobs:
+                job["archetype"] = guess_archetype(
+                    f"{job['title']} {job['description']}", archetypes_config)
 
             jobs.sort(key=lambda j: _relevance_rank(
                 j, prefs.get("target_roles", [])), reverse=True)
@@ -662,8 +669,9 @@ def render_history_entry(e: dict) -> None:
     badge = {"approved": "✅ approved", "rejected": "❌ rejected",
              "skipped": "⏭ skipped"}.get(decision, "🕓 undecided")
     score_label = f"{score:.0f}/100" if score is not None else "—"
+    tag = f"🏷️ {job['archetype']}  " if job.get("archetype") else ""
     with st.expander(f"{score_label} — **{job['title']}** @ "
-                     f"{job['company']}  {badge}"):
+                     f"{job['company']}  {tag}{badge}"):
         meta, dims = st.columns([1, 2])
         with meta:
             st.caption(f"{job.get('location') or '—'} · "
@@ -732,6 +740,7 @@ def page_history() -> None:
         "score": e.get("score"),
         "title": e["job"]["title"],
         "company": e["job"]["company"],
+        "archetype": e["job"].get("archetype") or "Unclassified",
         "location": e["job"].get("location", ""),
         "source": e["job"].get("source", ""),
         "publisher": e["job"].get("publisher") or "",
@@ -748,7 +757,18 @@ def page_history() -> None:
             "publisher": st.column_config.TextColumn(
                 "publisher", help="Origin board for aggregator sources "
                 "(e.g. Glassdoor via jsearch)"),
+            "archetype": st.column_config.TextColumn(
+                "archetype", help="Deterministic role-category tag from "
+                "your profile.yaml `archetypes` (or the built-in default)"),
         })
+
+    archetypes_present = sorted(
+        {e["job"].get("archetype") or "Unclassified" for e in entries})
+    pick = st.selectbox("🏷️ Filter by archetype",
+                        ["All"] + archetypes_present)
+    if pick != "All":
+        entries = [e for e in entries
+                  if (e["job"].get("archetype") or "Unclassified") == pick]
 
     st.subheader("🔍 Job details")
     st.caption("Grouped by decision. Undecided is where a job lands if "

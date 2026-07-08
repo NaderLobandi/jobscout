@@ -30,6 +30,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .agents import scoring_agent, drafting_agent, search_agent
+from .archetype import guess_archetype
 from .contacts import find_contacts
 from .cv_pipeline import generate_cv_pdf
 from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
@@ -143,6 +144,15 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
         console.print("[yellow]Nothing new to score — try broadening your "
                       "profile keywords or clearing .jobscout_memory.json[/yellow]")
         return
+
+    # Archetype tag: deterministic, cheap enough for every surviving job
+    # (not just scored ones) — the user's own taxonomy from profile.yaml
+    # (`archetypes`), or a sensible default if that key is absent.
+    archetypes_config = profile.get("archetypes")
+    for job in jobs:
+        job["archetype"] = guess_archetype(
+            f"{job['title']} {job['description']}", archetypes_config)
+
     if dry_run:
         _print_table(jobs[:20])
         console.print("[dim]--dry-run: stopping before LLM scoring.[/dim]")
@@ -299,8 +309,10 @@ def _print_table(jobs: list[dict]) -> None:
     table.add_column("Company")
     table.add_column("Loc", max_width=20)
     table.add_column("Source")
+    table.add_column("Archetype")
     for j in jobs:
-        table.add_row(j["title"], j["company"], j["location"], j["source"])
+        table.add_row(j["title"], j["company"], j["location"], j["source"],
+                      j.get("archetype") or "—")
     console.print(table)
 
 

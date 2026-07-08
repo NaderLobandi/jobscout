@@ -45,3 +45,18 @@ sources:
   # endpoint, which LinkedIn's ToS prohibit automating. Off by default.
   # To enable AT YOUR OWN RISK: add "linkedin" to enabled AND set this true.
   linkedin_tos_acknowledged: false
+
+# Optional: your own role-category taxonomy for tagging/organizing
+# History (deterministic keyword matching, first match wins, no LLM
+# call). Omit this whole key to use JobScout's built-in default
+# (src/archetype.py DEFAULT_ARCHETYPES) — most users won't need to
+# touch this.
+archetypes:
+  - name: Research
+    keywords: [research scientist, research engineer, research intern, publication, phd]
+  - name: Applied ML / MLOps
+    keywords: [machine learning engineer, ml engineer, mlops, model deployment, production ml, inference]
+  - name: Agentic / LLM Systems
+    keywords: [agentic, llm, rag, orchestration, chatbot, multi-agent, agent]
+  - name: Data Science
+    keywords: [data scientist, analytics, experimentation, "a/b test", forecasting]

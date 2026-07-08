@@ -118,9 +118,12 @@ guardrails, and agents):
   company tokens and the LinkedIn ToS acknowledgment). Saves to
   `profile/profile.yaml` (gitignored).
 - **🚀 Run JobScout** — one click runs search → deterministic filter →
-  resume analysis → per-job scoring with live progress, with an optional
-  **"stop early once N found"** goal so it keeps scoring more jobs (up to
-  your cost cap) instead of a fixed batch. Each match expands into a
+  **archetype tagging** (🏷️ a role-category label — Research, Applied
+  ML/MLOps, Agentic/LLM Systems, etc. — from a keyword taxonomy you can
+  customize in `profile.yaml`, no LLM call) → resume analysis → per-job
+  scoring with live progress, with an optional **"stop early once N
+  found"** goal so it keeps scoring more jobs (up to your cost cap)
+  instead of a fixed batch. Each match expands into a
   score-dimension breakdown, a drafted cover letter that's already been
   through a second-pass reviewer critique + resume tweaks, a **tailored,
   ATS-optimized CV PDF** you can download directly, a deterministic
@@ -131,12 +134,14 @@ guardrails, and agents):
   HITL gate as a UI.
 - **📚 History** — every job ever scored, with scores, decisions, the date
   you decided, the origin **publisher** for aggregator sources (e.g.
-  `jsearch (Glassdoor)`), and saved cover letters (`.jobscout_records.json`,
-  gitignored), plus a JSON export. Each entry expands into its full
-  per-dimension score breakdown and draft, so the summary table's score
-  always has somewhere to drill into — filter by decision (including
-  `undecided`) to see exactly what an unattended `--auto` run left for you
-  to review. Opens with a **recurring-gaps** view: which scoring dimension
+  `jsearch (Glassdoor)`), its **🏷️ archetype tag**, and saved cover letters
+  (`.jobscout_records.json`, gitignored), plus a JSON export. Each entry
+  expands into its full per-dimension score breakdown and draft, so the
+  summary table's score always has somewhere to drill into — filter by
+  decision (including `undecided`) or by **archetype** to see exactly
+  what an unattended `--auto` run left for you to review, or to focus on
+  one category of role at a time. Opens with a **recurring-gaps** view:
+  which scoring dimension
   consistently drags you down across your whole history (pure
   aggregation, free, no LLM call), with an on-demand button to get a
   short, evidence-grounded suggestion for the weakest one.
@@ -418,6 +423,21 @@ None of that changes what it is: automated access that LinkedIn's terms
 prohibit. If that trade-off isn't acceptable to you, leave it off — every
 other source is unaffected.
 
+## Archetype Tagging
+
+Every job that survives the deterministic filter gets a 🏷️ role-category
+tag — Research, Applied ML/MLOps, Agentic/LLM Systems, Data Science, and
+so on — shown on its card and usable as a filter dimension in History.
+It's plain keyword matching (`src/archetype.py`, first configured
+category with a matching phrase wins), no LLM call, same substring
+discipline as the dealbreaker filter. The taxonomy is yours to edit:
+add an `archetypes:` list to `profile.yaml` (see
+`profile/profile.example.yaml`) with your own category names and
+keywords — omit it entirely to use the built-in default. A job matching
+none of your categories is tagged "Unclassified," which is informative
+in its own right (maybe your taxonomy needs a new category), not an
+error.
+
 ## Contact Discovery
 
 An optional, per-posting **"🔍 Find contacts"** button (Run and History
@@ -513,7 +533,7 @@ mcp-server/                  MCP server + normalized schema + 11 adapters
 src/                         orchestrator, sub-agents, guardrails, memory,
                              intake, pipeline (UI helpers), records (history),
                              cv_render (ATS PDF layout), cv_pipeline (glue),
-                             contacts (Hunter.io lookup)
+                             contacts (Hunter.io lookup), archetype (role tags)
 app.py                       Streamlit UI (profile / run / history)
 profile/profile.example.yaml committed template (real profile is gitignored)
 profile/documents/           optional supplementary docs (gitignored except README)

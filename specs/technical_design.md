@@ -51,6 +51,16 @@ Five components per the course framework: **model** (Claude API),
    drops anything older than `preferences.max_posting_age_days` — and,
    unlike the other filters, an UNDATED posting does NOT pass when this
    is set, since the point is a freshness guarantee.
+3b. Archetype tag: `src/archetype.py` classifies every job that survives
+   the filter into the user's own role taxonomy (`profile.yaml`
+   `archetypes`, or `DEFAULT_ARCHETYPES` if that key is absent) —
+   literal keyword substring matching, same discipline as
+   `violates_dealbreakers()`, no LLM call. First configured archetype
+   with a matching keyword wins; `None` ("Unclassified") if nothing
+   matches. Stored as `job["archetype"]`, so it flows into Records
+   automatically (`Records.upsert()` always persists the whole job
+   dict) — no separate storage field needed. Surfaced as a tag on every
+   job card and as a filter dimension in the Streamlit History page.
 4. Score: Scoring Agent per job (masked resume + prefs) → weighted score,
    per-dimension breakdown, rationale (structured output, JSON schema).
    `--min-matches N` (CLI) turns the fixed-batch scoring pass into a
