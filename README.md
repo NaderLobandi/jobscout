@@ -609,6 +609,21 @@ from your phone, share, or turn into a kanban application tracker.
   columns are skipped, never an error. Re-syncs update existing pages
   instead of duplicating them.
 
+**HITL over Notion.** Notion webhooks require a public HTTPS endpoint —
+its own docs say "localhost is not reachable" — so a live push from
+Notion into a personal machine isn't possible. **"🔁 Pull decisions from
+Notion"** (History page) is the honest equivalent: change a job's
+Decision cell directly in Notion (from your phone, say), then pull, and
+JobScout applies it here — the identical human decision as clicking
+Approve/Reject/Skip in the app, never a submission, just made
+asynchronously. `--auto` runs pull automatically at the START (so a
+decision you made since the last run is already reflected before that
+job could resurface in search).
+
+**Daily digest.** Every `--auto` run posts one summary page to Notion
+(found / kept / scored / matched) — even on a day it finds nothing new,
+so a scheduled run always leaves a trail, not silence.
+
 Setup (~2 minutes): create an internal integration at
 [notion.so/my-integrations](https://www.notion.so/my-integrations), create
 a database with whichever suggested columns you want, share the database

@@ -231,6 +231,27 @@ Five components per the course framework: **model** (Claude API),
    an `--auto` run (scheduled runs land results where the human will
    see them). Requires `NOTION_API_KEY` + `NOTION_DATABASE_ID`; any
    failure degrades to a warning, never blocks the pipeline.
+10b. HITL over Notion (`notion_sync.pull_decisions()`): Notion webhooks
+   require a public HTTPS endpoint ("localhost is not reachable" per
+   Notion's own docs) — unreachable for a local personal tool, so a live
+   PUSH from Notion isn't possible. This is the honest pull equivalent:
+   the human changes the Decision select cell in Notion (already
+   populated with approved/rejected/skipped/undecided by sync), and
+   JobScout reads it back via `GET /v1/pages/{id}` and applies it to
+   Records + Memory — the identical decision class as clicking
+   Approve/Reject/Skip in the UI or answering the CLI prompt (never a
+   submission), so CLAUDE.md constraint 1's hard stop is untouched; this
+   only adds an async surface for making that same human decision. Runs
+   automatically at the START of every `--auto` run (before searching,
+   so an already-decided job's memory state is current when the
+   seen-filter runs) and on demand via a History-page button. Only
+   entries already synced (carry a `notion_page_id`) are checked.
+10c. Daily digest (`notion_sync.push_digest()`): one standalone Notion
+   page per `--auto` run summarizing its outcome (jobs found/kept/
+   scored/matched) as bulleted page content — not a job row, so it
+   never pollutes the per-job table. Posted even on a 0-kept run, so a
+   scheduled run leaves a trail on days it finds nothing new. No LLM
+   call; built from counters the orchestrator already tracks.
 
 ## 3. Data contracts
 

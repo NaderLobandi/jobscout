@@ -951,7 +951,7 @@ def page_history() -> None:
             for e in buckets[key]:
                 render_history_entry(e)
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     c1.download_button(
         "⬇️ Export all records (JSON)",
         data=json.dumps(records.all(), indent=2, default=str),
@@ -976,6 +976,29 @@ def page_history() -> None:
                     st.warning(f"{msg}, {failed} failed.")
                 else:
                     st.success(f"{msg}.")
+        if c3.button("🔁 Pull decisions from Notion",
+                     help="If you changed a job's Decision cell directly in "
+                          "Notion (e.g. from your phone), this reads that "
+                          "back and applies it here. Notion has no way to "
+                          "push that change to JobScout automatically — "
+                          "it requires a public server JobScout doesn't "
+                          "run — so pulling on demand is the way to pick "
+                          "up decisions made there."):
+            with st.spinner("Checking Notion for decisions…"):
+                pulled = notion_sync.pull_decisions(records, memory)
+            if pulled is None:
+                st.error("Couldn't read your Notion database — check the "
+                         "key, the database id, and that it's shared with "
+                         "your integration.")
+            else:
+                applied, checked = pulled
+                if applied:
+                    st.success(f"Applied {applied} decision(s) made in "
+                              f"Notion (checked {checked} synced record(s)).")
+                    st.rerun()
+                else:
+                    st.info(f"No new decisions found ({checked} synced "
+                           "record(s) checked).")
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,19 @@ still fully supported through Notion's per-request version pinning
 after the 2025-09 database/data-source split. Migrating to the
 data-source API would mean GET database -> data_sources[0] -> GET data
 source for the schema and `data_source_id` page parents.
+
+HITL over Notion (pull_decisions): Notion webhooks require a public
+HTTPS endpoint ("Endpoints in localhost are not reachable" — Notion's
+own docs) — unreachable for a local personal tool, so a live PUSH from
+Notion into JobScout isn't possible. pull_decisions() is the honest
+equivalent: the human changes the "Decision" select cell in Notion
+(already populated with approved/rejected/skipped/undecided from
+sync_records), and JobScout reads that back and applies it locally on
+the next check. This is the same class of action as clicking Approve in
+the Streamlit UI or answering the CLI prompt — a genuine human decision,
+recorded, never triggering any submission — so it does not relax
+CLAUDE.md constraint 1's hard stop, it just adds a surface for making
+that decision asynchronously.
 """
 
 from __future__ import annotations
@@ -191,3 +204,97 @@ def sync_records(records) -> tuple[int, int, int] | None:
         else:
             updated += 1
     return created, updated, failed
+
+
+_VALID_DECISIONS = {"approved", "rejected", "skipped", "undecided"}
+
+
+def pull_decisions(records, memory=None) -> tuple[int, int] | None:
+    """Read back decisions the human made directly in Notion's Decision
+    column and apply them locally — see module docstring for why this is
+    poll/pull, not a live push. Only entries already synced (they carry a
+    notion_page_id) are checked; nothing to reconcile for a job never
+    pushed. Returns (applied, checked), or None if the database/schema
+    itself can't be read at all.
+
+    `memory` is optional so a caller without a Memory instance can still
+    reconcile decisions in Records — but passing it keeps memory's
+    seen/decision state (used by the deterministic seen-filter) in sync
+    with a decision made remotely, exactly as every other decision path
+    already does."""
+    if not available():
+        return None
+    schema = fetch_schema()
+    if schema is None:
+        return None
+    name, ptype = schema.get("decision", (None, None))
+    if not name or ptype != "select":
+        return 0, 0  # database has no compatible Decision column to read
+
+    applied = checked = 0
+    for entry in records.all():
+        page_id = entry.get("notion_page_id")
+        if not page_id:
+            continue
+        checked += 1
+        try:
+            resp = httpx.get(f"{API_BASE}/pages/{page_id}",
+                             headers=_headers(), timeout=15.0)
+            resp.raise_for_status()
+            prop = resp.json().get("properties", {}).get(name) or {}
+            notion_decision = ((prop.get("select") or {}).get("name")
+                              or "").lower()
+        except Exception:
+            continue  # one unreadable page must not stop the rest
+        if notion_decision not in _VALID_DECISIONS:
+            continue  # empty cell, or the user typed something else
+        job = entry["job"]
+        if notion_decision != (entry.get("decision") or "undecided"):
+            records.upsert(job, decision=notion_decision)
+            if memory is not None:
+                memory.mark_seen(job["id"], job["title"], notion_decision)
+            applied += 1
+    return applied, checked
+
+
+def push_digest(stats: dict) -> str | None:
+    """Create a standalone Notion page summarizing ONE run's outcome — a
+    human-readable rollup, not a job row — so an unattended, scheduled
+    run leaves a trail even on a day it finds nothing new. No LLM call:
+    built entirely from counters the caller already tracks.
+
+    stats: {"date": str, "found": int, "kept": int, "scored": int,
+    "matches": int}. Returns the new page id, or None on failure/
+    unavailable/no title property (every Notion database has one, so
+    the last case only happens if the database itself is unreachable)."""
+    if not available():
+        return None
+    schema = fetch_schema()
+    if schema is None:
+        return None
+    title_name = next((n for n, t in schema.values() if t == "title"), None)
+    if not title_name:
+        return None
+
+    lines = [
+        f"Found: {stats.get('found', 0)} posting(s) across all boards",
+        f"Kept after filters: {stats.get('kept', 0)} (new, not seen before)",
+        f"Scored: {stats.get('scored', 0)}",
+        f"Matches (>= draft threshold): {stats.get('matches', 0)}",
+    ]
+    props = {title_name: {"title": [{"type": "text", "text": {
+        "content": f"📊 JobScout digest — {stats.get('date', '')}"}}]}}
+    children = [{"object": "block", "type": "bulleted_list_item",
+                "bulleted_list_item": {"rich_text": [
+                    {"type": "text", "text": {"content": line}}]}}
+               for line in lines]
+    try:
+        resp = httpx.post(
+            f"{API_BASE}/pages", headers=_headers(),
+            json={"parent": {"database_id": os.environ["NOTION_DATABASE_ID"]},
+                  "properties": props, "children": children},
+            timeout=15.0)
+        resp.raise_for_status()
+        return resp.json().get("id")
+    except Exception:
+        return None

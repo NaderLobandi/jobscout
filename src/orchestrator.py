@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from anthropic import Anthropic
@@ -48,6 +49,10 @@ from . import notion_sync
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CV_OUTPUT_DIR = REPO_ROOT / "output" / "cvs"
 console = Console()
+
+
+def _today() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
 
 
 def _relevance_rank(job: dict, target_roles: list[str]) -> int:
@@ -175,6 +180,17 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
     records = Records() if auto else None
     past_entries = (records or Records()).all()
 
+    if auto and records is not None and notion_sync.available():
+        # HITL over Notion: reconcile any decision the human made
+        # directly in Notion (changing the Decision cell) since the last
+        # run, BEFORE searching — so an approved/rejected job's memory
+        # state is already up to date when the seen-filter runs below.
+        pulled = notion_sync.pull_decisions(records, memory)
+        if pulled and pulled[0]:
+            console.print(f"[dim]Pulled {pulled[0]} decision(s) made in "
+                          f"Notion (checked {pulled[1]} synced "
+                          "record(s)).[/dim]")
+
     # ---- 2+3. Outcome-driven search + deterministic filter ---------------
     # Search until `max_score` NEW jobs survive the filter (the outcome is
     # the goal, not the visit count): deeper rounds rotate query keywords
@@ -192,11 +208,13 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
     jobs: list[dict] = []
     fetched_ids: set[str] = set()
     total_dropped: dict[str, int] = {}
+    total_found = 0
     async with stdio_client(server) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             for page in range(1, MAX_SEARCH_ROUNDS + 1):
                 raw = await search_agent.search(session, profile, page=page)
+                total_found += len(raw)
                 fresh = [j for j in raw if j["id"] not in fetched_ids]
                 fetched_ids.update(j["id"] for j in fresh)
                 kept, dropped = deterministic_filter(fresh, profile, memory)
@@ -211,6 +229,9 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
     if not jobs:
         console.print("[yellow]Nothing new to score. "
                       f"{_explain_empty_filter(total_dropped, profile)}[/yellow]")
+        if auto and notion_sync.available():
+            notion_sync.push_digest({"date": _today(), "found": total_found,
+                                     "kept": 0, "scored": 0, "matches": 0})
         return
 
     # Archetype tag + Block G legitimacy check: both deterministic, both
@@ -403,6 +424,11 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
                               f"{updated} updated"
                               + (f", {failed} failed" if failed else "")
                               + ".[/dim]")
+            page_id = notion_sync.push_digest({
+                "date": _today(), "found": total_found, "kept": len(jobs),
+                "scored": len(scored), "matches": matches})
+            if page_id:
+                console.print("[dim]Notion: daily digest posted.[/dim]")
         console.print(
             f"\n[green]Done. {matches} match(es) ≥ {threshold:.0f} saved to "
             f".jobscout_records.json for review in the Streamlit UI. "
