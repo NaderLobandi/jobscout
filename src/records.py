@@ -61,6 +61,15 @@ class Records:
             entry["contacts"] = contacts
         self._save()
 
+    def set_notion_page_id(self, job_id: str, page_id: str) -> None:
+        """Bookkeeping for the opt-in Notion sync: remembering the page
+        created for this record lets re-syncs update it in place instead
+        of duplicating it."""
+        entry = self._find(job_id)
+        if entry is not None:
+            entry["notion_page_id"] = page_id
+            self._save()
+
     def get(self, job_id: str) -> dict | None:
         return self._find(job_id)
 

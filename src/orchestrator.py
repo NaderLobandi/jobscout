@@ -43,6 +43,7 @@ from .liveness import filter_dead_postings
 from .memory import Memory
 from .pipeline import MAX_SEARCH_ROUNDS
 from .records import Records
+from . import notion_sync
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CV_OUTPUT_DIR = REPO_ROOT / "output" / "cvs"
@@ -387,6 +388,21 @@ async def run(max_score: int, dry_run: bool, min_matches: int | None = None,
                          "approved" if decision == "approved" else decision)
 
     if auto:
+        # Opt-in Notion mirror (NOTION_API_KEY + NOTION_DATABASE_ID): an
+        # unattended run pushes its results where the human will actually
+        # see them. Job metadata/scores/decisions only — cover letters and
+        # candidate PII never leave the machine.
+        if records is not None and notion_sync.available():
+            result = notion_sync.sync_records(records)
+            if result is None:
+                console.print("[yellow]Notion sync skipped — couldn't read "
+                              "the database (check key/id/sharing).[/yellow]")
+            else:
+                created, updated, failed = result
+                console.print(f"[dim]Notion: {created} created, "
+                              f"{updated} updated"
+                              + (f", {failed} failed" if failed else "")
+                              + ".[/dim]")
         console.print(
             f"\n[green]Done. {matches} match(es) ≥ {threshold:.0f} saved to "
             f".jobscout_records.json for review in the Streamlit UI. "

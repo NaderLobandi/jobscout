@@ -587,6 +587,35 @@ consistent with JobScout's security posture:
 - Every contact carries its **source citation** so you can verify it
   yourself before reaching out.
 
+## Notion sync (opt-in, off by default)
+
+**"📤 Sync history to Notion"** (History page) mirrors your scored-job
+records into your own Notion database — job title, company, score,
+decision, archetype, legitimacy tier, source, URL, and the one-paragraph
+summary. Unattended `--auto` runs sync automatically when configured, so
+a scheduled JobScout run lands its results in a database you can check
+from your phone, share, or turn into a kanban application tracker.
+
+- **Your own workspace, official keyed API** — this is remote storage of
+  data JobScout already keeps locally (`.jobscout_records.json`), not a
+  write to any job platform. No LLM call anywhere in the sync.
+- **Privacy line:** cover letters (which contain your unmasked name) and
+  all personal details **never leave the machine** — only public job
+  metadata, scores, and decisions are mirrored. The synced summary was
+  generated from PII-masked input.
+- **Adapts to your database.** JobScout reads your database's columns and
+  fills whatever matches (title plus any of: Company, Score, Decision,
+  Archetype, Legitimacy, Source, URL, Location, Summary, Date) — missing
+  columns are skipped, never an error. Re-syncs update existing pages
+  instead of duplicating them.
+
+Setup (~2 minutes): create an internal integration at
+[notion.so/my-integrations](https://www.notion.so/my-integrations), create
+a database with whichever suggested columns you want, share the database
+with the integration (**••• → Connections**), then set `NOTION_API_KEY`
+and `NOTION_DATABASE_ID` (the 32-char hex segment in the database URL)
+in `.env`.
+
 ## Deployment / path to production
 
 Local container (works today):

@@ -214,6 +214,23 @@ Five components per the course framework: **model** (Claude API),
    persists a THIRD PARTY's personal data, not the user's own (CLAUDE.md
    constraint 2 exception). JobScout only displays a contact; there is
    no code path that emails, messages, or otherwise contacts anyone.
+10. Notion sync (opt-in): `src/notion_sync.py` mirrors Records into the
+   user's OWN Notion database — a remote copy of data JobScout already
+   keeps locally, via the official keyed API, so CLAUDE.md constraint 3
+   (MCP read-only against job APIs) is untouched. **No LLM call**;
+   deterministic mapping. Privacy line: cover letters (unmasked name
+   after render) and all candidate PII never sync — only job metadata,
+   score, decision, archetype, legitimacy tier, and the summary (which
+   was generated from masked input). Adaptive schema: the database's own
+   properties are fetched (`GET /v1/databases/{id}`, pinned
+   Notion-Version 2022-06-28) and only name+type-compatible ones are
+   filled; the sole requirement is the title property every database
+   has. Created page ids are stored back into Records
+   (`notion_page_id`) so re-syncs PATCH in place instead of duplicating.
+   Triggered by the History-page button, or automatically at the end of
+   an `--auto` run (scheduled runs land results where the human will
+   see them). Requires `NOTION_API_KEY` + `NOTION_DATABASE_ID`; any
+   failure degrades to a warning, never blocks the pipeline.
 
 ## 3. Data contracts
 

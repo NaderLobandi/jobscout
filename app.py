@@ -32,6 +32,7 @@ from src.intake import (DOCUMENTS_DIR, PROFILE_PATH, WRITING_SAMPLES_DIR,
                         extract_writing_samples_text, list_profile_documents,
                         list_writing_samples, load_profile)
 from src.memory import Memory
+from src import notion_sync
 from src.orchestrator import (_explain_empty_filter, _relevance_rank,
                               deterministic_filter)
 from src.pipeline import (MAX_SEARCH_ROUNDS, collect_new_jobs, fetch_jobs,
@@ -950,10 +951,31 @@ def page_history() -> None:
             for e in buckets[key]:
                 render_history_entry(e)
 
-    st.download_button(
+    c1, c2 = st.columns(2)
+    c1.download_button(
         "⬇️ Export all records (JSON)",
         data=json.dumps(records.all(), indent=2, default=str),
         file_name="jobscout_records.json", mime="application/json")
+    if notion_sync.available():
+        if c2.button("📤 Sync history to Notion",
+                     help="Mirrors job metadata, scores, and decisions "
+                          "into your own Notion database (set NOTION_API_KEY "
+                          "and NOTION_DATABASE_ID). Cover letters and your "
+                          "personal details never leave this machine. "
+                          "Re-syncing updates existing pages, no duplicates."):
+            with st.spinner("Syncing records to Notion…"):
+                result = notion_sync.sync_records(records)
+            if result is None:
+                st.error("Couldn't read your Notion database — check the "
+                         "key, the database id, and that the database is "
+                         "shared with your integration (••• → Connections).")
+            else:
+                created, updated, failed = result
+                msg = f"Notion: {created} created, {updated} updated"
+                if failed:
+                    st.warning(f"{msg}, {failed} failed.")
+                else:
+                    st.success(f"{msg}.")
 
 
 # ---------------------------------------------------------------------------
