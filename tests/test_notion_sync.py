@@ -82,6 +82,62 @@ def test_build_properties_adapts_to_the_databases_schema():
     assert not any("location" in k.lower() for k in props)
 
 
+# A real-world application-tracker schema (modeled on an actual user's
+# database): different column names than the suggested defaults, PLUS a
+# "Status" column that's the user's OWN manual workflow (Priority/Review/
+# Applied/Archive) — a `status` property, not `select`. Exposed real gaps
+# in name-matching (Job URL, Date found, Why it fits, Red flags) and one
+# correctness requirement: Status must never be touched.
+REAL_WORLD_SCHEMA = {
+    "role title": ("Role title", "title"),
+    "company": ("Company", "rich_text"),
+    "match score": ("Match score", "number"),
+    "status": ("Status", "status"),
+    "source": ("Source", "select"),
+    "job url": ("Job URL", "url"),
+    "why it fits": ("Why it fits", "rich_text"),
+    "red flags": ("Red flags", "rich_text"),
+    "date found": ("Date found", "date"),
+    "paid": ("Paid", "checkbox"),
+}
+
+
+def test_matches_real_world_column_names():
+    entry = {**ENTRY, "job": {**ENTRY["job"],
+                              "legitimacy": {"tier": "caution",
+                                            "reasons": ["short description"]}}}
+    props = notion_sync.build_properties(entry, REAL_WORLD_SCHEMA)
+
+    assert props["Job URL"]["url"] == "https://jobs.example/1"
+    assert "fit" in props["Why it fits"]["rich_text"][0]["text"]["content"]
+    assert props["Red flags"]["rich_text"][0]["text"]["content"] == \
+        "short description"
+    assert props["Date found"]["date"]["start"] == entry["updated"]
+
+
+def test_status_property_is_never_written():
+    # Correctness requirement, not just a missed match: a status property
+    # commonly holds the user's OWN separate tracking workflow. Writing
+    # JobScout's decision into it would corrupt real state.
+    props = notion_sync.build_properties(ENTRY, REAL_WORLD_SCHEMA)
+    assert "Status" not in props
+
+
+def test_date_prefers_first_seen_over_updated():
+    entry = {**ENTRY, "first_seen": "2026-07-01T00:00:00+00:00"}
+    schema = {"date": ("Date found", "date"), "job": ("Job", "title")}
+    props = notion_sync.build_properties(entry, schema)
+    assert props["Date found"]["date"]["start"] == "2026-07-01T00:00:00+00:00"
+
+
+def test_legitimacy_reasons_skipped_when_clean():
+    # high_confidence with no reasons -> nothing to say -> field skipped,
+    # not an empty string written over whatever's already in the cell.
+    schema = {"flags": ("Red flags", "rich_text"), "job": ("Job", "title")}
+    props = notion_sync.build_properties(ENTRY, schema)
+    assert "Red flags" not in props
+
+
 def test_select_values_never_contain_commas():
     # Notion rejects commas in select option names.
     schema = {"company": ("Company", "select"), "job": ("Job", "title")}

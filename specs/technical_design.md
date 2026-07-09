@@ -221,11 +221,22 @@ Five components per the course framework: **model** (Claude API),
    deterministic mapping. Privacy line: cover letters (unmasked name
    after render) and all candidate PII never sync — only job metadata,
    score, decision, archetype, legitimacy tier, and the summary (which
-   was generated from masked input). Adaptive schema: the database's own
-   properties are fetched (`GET /v1/databases/{id}`, pinned
-   Notion-Version 2022-06-28) and only name+type-compatible ones are
-   filled; the sole requirement is the title property every database
-   has. Created page ids are stored back into Records
+   was generated from masked input), and the legitimacy REASONS as text
+   (a field named "Red Flags"/"Flags"/"Risks"/"Concerns" is a common,
+   better-fitting target than the bare tier). Adaptive schema: the
+   database's own properties are fetched (`GET /v1/databases/{id}`,
+   pinned Notion-Version 2022-06-28) and only name+type-compatible ones
+   are filled; the sole requirement is the title property every database
+   has. Verified against a real user database whose column names
+   (`Job URL`, `Why it fits`, `Date found`, `Red flags`) differ from the
+   suggested defaults — candidate name lists were extended per field to
+   cover common real-world aliases. That database also had a `Status`
+   column of Notion's distinct `status` type (not `select`) holding the
+   user's OWN separate application-tracking workflow — confirmed
+   `status`-type properties are NEVER written to, deliberately: the
+   `decision` field only maps onto `select`-type columns, so a user's
+   real hand-managed tracking stage can never be corrupted by a name
+   coincidence. Created page ids are stored back into Records
    (`notion_page_id`) so re-syncs PATCH in place instead of duplicating.
    Triggered by the History-page button, or automatically at the end of
    an `--auto` run (scheduled runs land results where the human will

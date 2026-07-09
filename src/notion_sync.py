@@ -104,33 +104,47 @@ def _date(value) -> dict:
 # names it may land in (first present wins), the property types it can
 # fill, and the builder per type. Anything the database lacks is simply
 # skipped — adaptive, never an error.
+#
+# NEVER add "status" as a fillable type for "decision": a Notion status
+# property (distinct from select) commonly holds the user's OWN separate
+# application-tracking workflow (e.g. Priority/Review/Applied/Archive) —
+# overwriting it with JobScout's approved/rejected/skipped would corrupt
+# real manually-tracked state, not just miss a match. Leave status
+# properties untouched entirely; the user owns that column.
 _FIELDS = [
     ("company", ("company",), {"rich_text": _text, "select": _select}),
     ("score", ("score", "match score"), {"number": _number}),
     ("decision", ("decision",), {"select": _select}),
     ("archetype", ("archetype", "category"), {"select": _select}),
     ("legitimacy", ("legitimacy",), {"select": _select}),
+    ("legitimacy_reasons", ("red flags", "flags", "risks", "concerns"),
+     {"rich_text": _text}),
     ("source", ("source", "board"), {"select": _select}),
-    ("url", ("url", "link", "posting"), {"url": _url}),
+    ("url", ("url", "link", "posting", "job url"), {"url": _url}),
     ("location", ("location",), {"rich_text": _text, "select": _select}),
-    ("summary", ("summary", "notes", "analysis"), {"rich_text": _text}),
-    ("date", ("date", "scored", "updated"), {"date": _date}),
+    ("summary", ("summary", "notes", "analysis", "why it fits"),
+     {"rich_text": _text}),
+    ("date", ("date", "scored", "updated", "date found"), {"date": _date}),
 ]
 
 
 def _field_values(entry: dict) -> dict:
     job = entry["job"]
+    reasons = (job.get("legitimacy") or {}).get("reasons") or []
     return {
         "company": job.get("company"),
         "score": entry.get("score"),
         "decision": entry.get("decision") or "undecided",
         "archetype": job.get("archetype"),
         "legitimacy": (job.get("legitimacy") or {}).get("tier"),
+        "legitimacy_reasons": "; ".join(reasons),
         "source": job.get("source"),
         "url": job.get("url"),
         "location": job.get("location"),
         "summary": entry.get("summary"),
-        "date": entry.get("updated") or entry.get("first_seen"),
+        # "first_seen" is the honest "date found" — prefer it for a bare
+        # date column; fall back to "updated" for older/re-synced records.
+        "date": entry.get("first_seen") or entry.get("updated"),
     }
 
 

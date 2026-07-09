@@ -604,10 +604,19 @@ from your phone, share, or turn into a kanban application tracker.
   metadata, scores, and decisions are mirrored. The synced summary was
   generated from PII-masked input.
 - **Adapts to your database.** JobScout reads your database's columns and
-  fills whatever matches (title plus any of: Company, Score, Decision,
-  Archetype, Legitimacy, Source, URL, Location, Summary, Date) — missing
-  columns are skipped, never an error. Re-syncs update existing pages
-  instead of duplicating them.
+  fills whatever matches (title, plus any of these — several common
+  aliases recognized per field): Company; Score/Match score; Decision;
+  Archetype/Category; Legitimacy; Red Flags/Flags/Risks/Concerns (the
+  Block G reasons as text, not just the tier); Source/Board;
+  URL/Link/Posting/**Job URL**; Location; Summary/Notes/Analysis/**Why
+  it fits**; Date/Scored/Updated/**Date found**. Missing columns are
+  skipped, never an error. Re-syncs update existing pages instead of
+  duplicating them.
+- **Never touches a `status`-type property**, even one named "Decision"
+  or "Status" — Notion's status columns commonly hold your OWN
+  hand-managed workflow (e.g. Priority → Review → Applied → Archive).
+  Only `select`-type columns get JobScout's decision written to them;
+  your tracking stage is never at risk of being overwritten.
 
 **HITL over Notion.** Notion webhooks require a public HTTPS endpoint —
 its own docs say "localhost is not reachable" — so a live push from
