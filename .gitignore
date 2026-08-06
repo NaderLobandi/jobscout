@@ -25,3 +25,7 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+
+# Local agent tooling (machine-local settings + vendored skill copies)
+.claude/
+.agents/

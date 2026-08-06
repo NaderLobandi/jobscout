@@ -1,5 +1,7 @@
 anthropic>=0.60
-mcp[cli]>=1.9
+# <2 is load-bearing: mcp 2.0 removed mcp.server.fastmcp (renamed
+# mcp.server.mcpserver), which mcp-server/job_search_server.py imports.
+mcp[cli]>=1.9,<2
 httpx>=0.27
 pyyaml>=6.0
 pypdf>=5.0
