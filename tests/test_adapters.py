@@ -181,6 +181,33 @@ def test_linkedin_parsing(monkeypatch):
     assert fulltime.employment_type != "internship"
 
 
+def test_linkedin_sends_filters_as_codes_and_search_terms(monkeypatch):
+    # LinkedIn's AI job search drops f_JT/f_WT-style filters and expects the
+    # criteria in the search phrase. Send both so the search still narrows
+    # either way.
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "seeMoreJobPostings" in str(request.url):
+            seen.update(request.url.params)
+            return httpx.Response(200, text="")
+        return httpx.Response(200, text="")
+
+    monkeypatch.setattr(linkedin, "DETAIL_DELAY_S", 0)
+    monkeypatch.setattr(
+        linkedin, "http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    adapter = linkedin.LinkedInAdapter(employment_types=["contract"],
+                                       tos_acknowledged=True)
+    asyncio.run(adapter.search(SearchQuery(keywords=["ml"], remote_only=True)))
+
+    assert seen["f_JT"] == "C"          # legacy filter still sent
+    assert seen["f_WT"] == "2"
+    assert seen["keywords"].startswith("ml")   # rotation keyword untouched
+    assert "job type: contract" in seen["keywords"]
+    assert "workplace type: remote" in seen["keywords"]
+
+
 def test_linkedin_backs_off_on_rate_limit(monkeypatch):
     detail_calls = []
 

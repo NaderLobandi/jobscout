@@ -93,6 +93,18 @@ class LinkedInAdapter(JobSourceAdapter):
         jt = ",".join(_F_JT[t] for t in self.employment_types if t in _F_JT)
         if jt:
             params["f_JT"] = jt
+        # 2026: LinkedIn is moving job search to an AI/natural-language
+        # backend where f_JT/f_WT-style filters are being dropped and the
+        # criteria are expected inside the search phrase instead. Send
+        # BOTH: the codes still narrow wherever they're honored, and the
+        # same criteria restated in plain words survive when they aren't.
+        # Appended (never replacing kw) so a rotation keyword is unchanged
+        # if LinkedIn keeps the old behavior.
+        hints = [f"job type: {', '.join(self.employment_types)}"] if self.employment_types else []
+        if query.remote_only:
+            hints.append("workplace type: remote")
+        if hints and params.get("keywords"):
+            params["keywords"] = f"{params['keywords']} {' '.join(hints)}"
 
         try:
             async with http_client() as client:
