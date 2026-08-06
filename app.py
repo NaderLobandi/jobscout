@@ -155,15 +155,58 @@ def _contacts_section(job: dict, record: dict, key: str) -> None:
 # Sidebar
 # ---------------------------------------------------------------------------
 
+def _goto_history(focus: str | None = None) -> None:
+    """Jump to the History page, optionally landing on one decision tab.
+    Runs as a button callback, not inline: session_state for a widget key
+    can only be assigned before that widget is instantiated, and the nav
+    radio is already on screen by the time the button is clicked."""
+    st.session_state["nav"] = "📚 History"
+    if focus:
+        st.session_state["history_focus"] = focus
+
+
+def _clickable_metric(label: str, value: int, name: str,
+                      focus: str | None, hint: str) -> None:
+    """A stat that IS its own link into History. st.metric takes no
+    on_click, so a real (accessible, keyboard-reachable) button is laid
+    over it and made invisible — the metric stays a metric, while the whole
+    card becomes the click target."""
+    with st.container(key=f"stat_{name}"):
+        st.metric(label, value)
+        st.button(hint, key=f"goto_{name}", on_click=_goto_history,
+                  args=(focus,))
+
+
 with st.sidebar:
     st.title("🔭 JobScout")
     st.caption("Personal job-search concierge agent. Searches, scores, and "
                "drafts — **you** decide and apply.")
     page = st.radio("Navigate", ["👤 Profile", "🚀 Run JobScout", "📚 History"],
-                    label_visibility="collapsed")
+                    label_visibility="collapsed", key="nav")
     st.divider()
-    st.metric("Jobs reviewed", memory.seen_count)
-    st.metric("Approved", memory.approved_count)
+    # Reviewed spans every decision, so it opens History as-is rather than
+    # forcing one tab; Approved lands on its own bucket.
+    _clickable_metric("Jobs reviewed", memory.seen_count, "reviewed",
+                      None, "Show all reviewed jobs")
+    _clickable_metric("Approved", memory.approved_count, "approved",
+                      "approved", "Show approved jobs")
+    st.html("""
+        <style>
+        [class*="st-key-stat_"] { position: relative; }
+        [class*="st-key-stat_"]:hover [data-testid="stMetricValue"] {
+            text-decoration: underline;
+        }
+        /* Lift the button's OWN wrapper (st-key-goto_* sits on the element
+           container, which holds its own place in the stacking order).
+           Positioning only the inner .stButton leaves the wrapper behind
+           the metric, so clicks land on the metric and go nowhere. */
+        [class*="st-key-stat_"] [class*="st-key-goto_"] {
+            position: absolute; inset: 0; z-index: 2;
+        }
+        [class*="st-key-stat_"] [class*="st-key-goto_"] button {
+            width: 100%; height: 100%; opacity: 0; cursor: pointer;
+        }
+        </style>""")
     st.caption(f"Model: `{MODEL}`")
     st.caption("Audit trail: `logs/audit.jsonl`")
 
@@ -805,6 +848,18 @@ DECISION_CATEGORIES = [
 ]
 
 
+SORT_FIELDS = {
+    # Leading "has a value" flag keeps records missing the field grouped at
+    # the bottom on the default (descending) view instead of masquerading
+    # as a zero score / oldest posting.
+    "Match rating": lambda e: (e.get("score") is not None, e.get("score") or 0),
+    # posted_at is a stored ISO-8601 string, so plain string order IS
+    # chronological order — no parsing needed.
+    "Date posted": lambda e: (bool(e["job"].get("posted_at")),
+                              e["job"].get("posted_at") or ""),
+}
+
+
 def _history_decide(job: dict, decision: str) -> None:
     records.upsert(job, decision=decision)
     memory.mark_seen(job["id"], job["title"], decision)
@@ -938,12 +993,41 @@ def page_history() -> None:
               "here any time. Every tab's buttons work the same, so you "
               "can change your mind later too.")
 
+    with st.container(horizontal=True):
+        sort_by = st.multiselect(
+            "Sort by", list(SORT_FIELDS), default=["Match rating"],
+            key="hist_sort",
+            help="Pick more than one to sort like SQL's ORDER BY: the "
+                 "first field decides, the next one breaks its ties.")
+        order = st.selectbox("Order", ["Descending", "Ascending"],
+                             key="hist_order")
+    if sort_by:
+        entries = sorted(
+            entries, key=lambda e: tuple(SORT_FIELDS[f](e) for f in sort_by),
+            reverse=order == "Descending")
+
     buckets: dict[str, list[dict]] = {key: [] for key, _ in DECISION_CATEGORIES}
     for e in entries:
         buckets[e.get("decision") or "undecided"].append(e)
 
-    tabs = st.tabs([f"{label} ({len(buckets[key])})"
-                   for key, label in DECISION_CATEGORIES])
+    labels = [f"{label} ({len(buckets[key])})"
+              for key, label in DECISION_CATEGORIES]
+    # Tab labels carry live counts, so the archetype filter rewrites them —
+    # remap the stored selection onto the new label instead of letting an
+    # unmatched value silently bounce the user back to the first tab.
+    stored = st.session_state.get("hist_tabs")
+    if stored and stored not in labels:
+        stem = stored.rsplit(" (", 1)[0]
+        st.session_state["hist_tabs"] = next(
+            (l for l in labels if l.startswith(stem)), labels[0])
+    # Sidebar "Show approved jobs →" lands here: preselect its tab by
+    # writing the tab widget's state BEFORE st.tabs() instantiates it, and
+    # pop the flag so a later manual tab switch isn't overridden.
+    focus = st.session_state.pop("history_focus", None)
+    keys = [key for key, _ in DECISION_CATEGORIES]
+    if focus in keys:
+        st.session_state["hist_tabs"] = labels[keys.index(focus)]
+    tabs = st.tabs(labels, key="hist_tabs")
     for tab, (key, _) in zip(tabs, DECISION_CATEGORIES):
         with tab:
             if not buckets[key]:
